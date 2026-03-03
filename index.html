@@ -917,11 +917,14 @@ select.form-input { appearance: none; }
 .fs-14 { font-size: 14px; }
 .fs-13 { font-size: 13px; }
 
-/* 主题切换过渡动画 */
-body, .appbar, .card, .stat-card, .q-card, .modal-sheet, .modal-dialog,
-.option-item, .quiz-footer, .quiz-header, .page-content, .filter-chip,
-.form-input, .btn, .home-tile, .batch-bar {
-  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+/* 主题切换过渡 - 所有元素同时变色 */
+html.theme-transitioning,
+html.theme-transitioning body,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.3s ease, color 0.3s ease,
+              border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
 /* safe area */
@@ -1100,7 +1103,8 @@ const DB = (() => {
     await idbPut('meta', { key, value });
   }
 
-  return { init, getFolders, saveFolder, deleteFolder, getQuestions, getAllQuestions, saveQuestion, deleteQuestion, getMeta, setMeta };
+  function closeConnection() { try { if (db) { db.close(); db = null; } } catch(e) {} }
+  return { init, getFolders, saveFolder, deleteFolder, getQuestions, getAllQuestions, saveQuestion, deleteQuestion, getMeta, setMeta, _closeConnection: closeConnection };
 })();
 
 /* =========================================================
@@ -1177,6 +1181,25 @@ const Utils = {
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2200);
+  },
+  // 统一确认弹窗（替代 confirm()）
+  confirm(title, msg, okText = '确认', danger = false) {
+    return new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.className = 'modal-overlay center';
+      ov.innerHTML = `<div class="modal-dialog" style="max-width:300px;text-align:center">
+        <div style="font-size:36px;margin-bottom:8px">${danger ? '⚠️' : '❓'}</div>
+        <div class="modal-title" style="margin-bottom:6px">${Utils.esc(title)}</div>
+        <div style="font-size:14px;color:var(--text3);margin-bottom:20px">${Utils.esc(msg)}</div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline flex-1" id="uc-cancel">取消</button>
+          <button class="btn ${danger?'btn-danger':'btn-primary'} flex-1" id="uc-ok">${Utils.esc(okText)}</button>
+        </div></div>`;
+      ov.querySelector('#uc-ok').onclick = () => { ov.remove(); resolve(true); };
+      ov.querySelector('#uc-cancel').onclick = () => { ov.remove(); resolve(false); };
+      ov.onclick = e => { if(e.target===ov) { ov.remove(); resolve(false); } };
+      document.body.appendChild(ov);
+    });
   },
   // 防抖
   debounce(fn, ms) {
@@ -1351,6 +1374,8 @@ const Nav = {
 
     State.batchMode = false;
     State.batchSelected.clear();
+    // 返回时刷新首页摘要（错题数、积分、总题数）
+    setTimeout(() => Nav.refreshHome(), 350);
   },
   // 返回首页（清除所有子页面）
   home() {
@@ -1384,14 +1409,28 @@ const Nav = {
       });
     });
   },
-  // 刷新首页摘要
+  // 刷新首页摘要（包括错题徽章）
   async refreshHome() {
-    const home = document.querySelector('.page');
-    if (home) {
-      const summary = home.querySelector('.summary-bar');
-      if (summary) {
-        const d = await Pages.getHomeSummary();
-        summary.innerHTML = Pages.renderSummaryHTML(d);
+    const pages = document.getElementById('app')?.querySelectorAll('.page');
+    const home = pages?.[0]; // 首页始终是第一个页面
+    if (!home) return;
+    const summary = home.querySelector('.summary-bar');
+    if (summary) {
+      const d = await Pages.getHomeSummary();
+      summary.innerHTML = Pages.renderSummaryHTML(d);
+      // 同步更新首页错题徽章
+      const wrongTile = [...home.querySelectorAll('.home-tile')].find(t => t.querySelector('.home-tile-title')?.textContent.trim() === '错题');
+      if (wrongTile) {
+        const badge = wrongTile.querySelector('.home-tile-badge');
+        if (d.wrong > 0) {
+          if (badge) badge.textContent = d.wrong;
+          else {
+            const b = document.createElement('span');
+            b.className = 'home-tile-badge';
+            b.textContent = d.wrong;
+            wrongTile.appendChild(b);
+          }
+        } else if (badge) badge.remove();
       }
     }
   },
@@ -1585,16 +1624,24 @@ const Pages = {
           </div>`;
         return;
       }
+      const PRESET_COLORS = ['#EEF2FF','#F0FDF4','#FFF7ED','#FDF2F8','#F0FDFA','#FEF9C3','#F1F5F9'];
+      const PRESET_DARK =   ['#1E1B4B','#052E16','#431407','#3B0764','#042F2E','#422006','#1E293B'];
       const folderCards = await Promise.all(folders.map(async (f, idx) => {
         const qs = await DB.getQuestions(f.id);
         const wrong = qs.filter(q => q.wrongCount > 0).length;
         const starred = qs.filter(q => q.starred).length;
-        const ci = idx % 5;
+        const ci = idx % PRESET_COLORS.length;
+        const bgLight = f.color || PRESET_COLORS[ci];
+        const bgDark  = f.colorDark || PRESET_DARK[ci];
+        const iconChar = f.icon || '';
         return `
           <div class="card" style="margin-bottom:10px">
             <div class="card-row" onclick="Nav.push('folder',{folderId:${f.id}})">
-              <div class="card-row-icon folder-color-${ci}">
-                <span class="folder-icon-color-${ci}">${Icons.folder}</span>
+              <div class="card-row-icon" style="background:${bgLight}" data-dark-bg="${bgDark}">
+                ${iconChar
+                  ? `<span style="font-size:18px;line-height:1">${Utils.esc(iconChar)}</span>`
+                  : `<span style="color:${bgLight==='#F0FDF4'?'#16A34A':bgLight==='#FFF7ED'?'#EA580C':bgLight==='#FDF2F8'?'#A21CAF':bgLight==='#F0FDFA'?'#0D9488':'#4F46E5'}">${Icons.folder}</span>`
+                }
               </div>
               <div class="card-row-content">
                 <div class="card-row-title">${Utils.esc(f.name)}</div>
@@ -1609,6 +1656,12 @@ const Pages = {
             </div>
           </div>`;
       }));
+      // Apply dark mode backgrounds
+      setTimeout(() => {
+        document.querySelectorAll('[data-dark-bg]').forEach(el2 => {
+          if (State.darkMode) el2.style.background = el2.dataset.darkBg;
+        });
+      }, 0);
       content.innerHTML = `
         <div class="section-title">所有文件夹</div>
         ${folderCards.join('')}
@@ -1663,6 +1716,7 @@ const Pages = {
     fab.className = 'fab';
     fab.innerHTML = Icons.plus;
     fab.style.bottom = 'calc(24px + env(safe-area-inset-bottom))';
+    fab.style.zIndex = '100';
     fab.onclick = () => Nav.push('editQ', { folderId, qId: null });
     el.appendChild(fab);
 
@@ -1701,12 +1755,14 @@ const Pages = {
       let qs = [...allQs];
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        qs = qs.filter(x =>
-          x.question.toLowerCase().includes(q) ||
-          (x.answer && String(x.answer).toLowerCase().includes(q)) ||
-          (x.explanation && x.explanation.toLowerCase().includes(q)) ||
-          (x.options && x.options.some(o => o.toLowerCase().includes(q)))
-        );
+        qs = qs.filter(x => {
+          try {
+            return (x.question && x.question.toLowerCase().includes(q)) ||
+              (x.answer && String(x.answer).toLowerCase().includes(q)) ||
+              (x.explanation && x.explanation.toLowerCase().includes(q)) ||
+              (x.options && x.options.some(o => o && o.toLowerCase().includes(q)));
+          } catch(e) { return false; }
+        });
       }
       if (filterType === 'wrong') qs = qs.filter(x => x.wrongCount > 0);
       else if (filterType === 'fav') qs = qs.filter(x => x.starred);
@@ -2113,7 +2169,8 @@ const Pages = {
       await Nav.pop();
     };
     el._delete = async () => {
-      if (!confirm('确定删除这道题目？')) return;
+      const qDelOk = await Utils.confirm('删除题目', '确定删除这道题目？不可恢复', '确认删除', true);
+      if (!qDelOk) return;
       await DB.deleteQuestion(qId);
       Utils.toast('已删除');
       await Nav.pop();
@@ -2135,7 +2192,7 @@ const Pages = {
 
     async function refresh() {
       const qs = await DB.getAllQuestions();
-      const wrongQs = qs.filter(q => q.wrongCount > 0).sort((a,b) => b.wrongCount - a.wrongCount);
+      const wrongQs = qs.filter(q => q.wrongCount > 0 && (q.weight || 1) > 1).sort((a,b) => b.wrongCount - a.wrongCount);
       if (!wrongQs.length) {
         content.innerHTML = `
           <div class="empty-state">
@@ -2445,9 +2502,14 @@ const Pages = {
             </div>`).join('')}
         ` : ''}
         <div style="height:20px"></div>
-        <button class="btn btn-outline btn-block" onclick="Actions.resetAllStats()" style="color:var(--danger);border-color:var(--danger)">
-          ${Icons.reset} 重置所有统计
-        </button>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <button class="btn btn-outline btn-block" onclick="Actions.resetAllStats()" style="color:var(--danger);border-color:var(--danger)">
+            ${Icons.reset}&nbsp;&nbsp;重置所有统计数据
+          </button>
+          <button class="btn btn-outline btn-block" onclick="Actions.nukeAllData()" style="color:var(--danger);border-color:var(--danger)">
+            🗑️&nbsp;&nbsp;删除所有题目和数据
+          </button>
+        </div>
       `;
     }
     load();
@@ -2478,39 +2540,57 @@ const Pages = {
     const searchInput = searchDiv.querySelector('#global-search');
     const clearBtn = searchDiv.querySelector('#global-search-clear');
 
+    let searchLimit = 50;
+    let lastResults = [];
+
     async function doSearch(query) {
-      if (!query) { content.innerHTML = `<div class="empty-state"><div style="color:var(--text3)">${Icons.search}</div><div class="empty-sub">输入关键词搜索题目</div></div>`; return; }
+      if (!query) {
+        content.innerHTML = `<div class="empty-state"><div style="color:var(--text3)">${Icons.search}</div><div class="empty-sub">输入关键词搜索题目</div></div>`;
+        return;
+      }
       const allQs = await DB.getAllQuestions();
       const q = query.toLowerCase();
-      const results = allQs.filter(x =>
-        x.question.toLowerCase().includes(q) ||
-        (x.answer && x.answer.toLowerCase().includes(q)) ||
-        (x.explanation && x.explanation.toLowerCase().includes(q)) ||
-        (x.options && x.options.some(o => o.toLowerCase().includes(q)))
-      );
-      if (!results.length) {
+      lastResults = allQs.filter(x => {
+        try {
+          return (x.question && x.question.toLowerCase().includes(q)) ||
+            (x.answer && String(x.answer).toLowerCase().includes(q)) ||
+            (x.explanation && x.explanation.toLowerCase().includes(q)) ||
+            (x.options && x.options.some(o => o && o.toLowerCase().includes(q)));
+        } catch(e) { return false; }
+      });
+      renderResults();
+    }
+
+    function renderResults() {
+      if (!lastResults.length) {
         content.innerHTML = `<div class="empty-state"><div class="empty-title">无结果</div><div class="empty-sub">换个关键词试试</div></div>`;
         return;
       }
+      const shown = lastResults.slice(0, searchLimit);
+      const hasMore = lastResults.length > searchLimit;
       content.innerHTML = `
-        <div class="fs-13" style="color:var(--text3);margin-bottom:10px">找到 ${results.length} 条结果</div>
-        ${results.map(q => Pages.renderQCard(q)).join('')}
+        <div class="fs-13" style="color:var(--text3);margin-bottom:10px">找到 ${lastResults.length} 条${hasMore?' · 显示前'+searchLimit+'条':''}</div>
+        ${shown.map(q => Pages.renderQCard(q)).join('')}
+        ${hasMore ? `<div id="search-more" style="text-align:center;padding:14px;color:var(--accent);font-size:14px;cursor:pointer">显示更多（还有 ${lastResults.length - searchLimit} 条）</div>` : ''}
       `;
+      content.querySelector('#search-more')?.addEventListener('click', () => { searchLimit += 50; renderResults(); });
       content.querySelectorAll('.q-card').forEach(card => {
-        card.onclick = () => {
+        card.onclick = (e) => {
+          if (e.target.closest('[onclick]')) return;
           const qid = +card.dataset.qid;
-          const idx = results.findIndex(q => q.id === qid);
-          Nav.push('quiz', { questions: results, startIdx: idx, mode: 'practice' });
+          const idx = lastResults.findIndex(q => q.id === qid);
+          Nav.push('quiz', { questions: lastResults, startIdx: idx, mode: 'practice' });
         };
       });
     }
 
     searchInput.oninput = Utils.debounce((e) => {
       const v = e.target.value.trim();
+      searchLimit = 50;
       clearBtn.style.display = v ? '' : 'none';
       doSearch(v);
     }, 300);
-    clearBtn.onclick = () => { searchInput.value = ''; clearBtn.style.display = 'none'; doSearch(''); };
+    clearBtn.onclick = () => { searchInput.value = ''; searchLimit = 50; clearBtn.style.display = 'none'; doSearch(''); };
     if (params.query) { searchInput.value = params.query; doSearch(params.query); }
     return el;
   },
@@ -2573,7 +2653,8 @@ const Pages = {
     function renderQ() {
       const q = questions[curIdx];
       if (!q) return;
-      answered = answers[curIdx] !== null;
+      // 考试模式：答案永远不"锁定"，直到点击提交考试
+      answered = isExam ? false : answers[curIdx] !== null;
       userAnswer = answers[curIdx];
 
       // 更新进度（用 el.querySelector 而非 document.getElementById，兼容页面未挂载时）
@@ -2593,14 +2674,17 @@ const Pages = {
           ${opts.map((o, i) => {
             const letter = String.fromCharCode(65+i);
             let cls = '';
-            if (answered) {
+            if (isExam) {
+              // 考试模式：只显示"已选"，不显示对错
+              if (letter === userAnswer) cls = 'selected';
+            } else if (answered) {
               if (letter === q.answer) cls = 'correct';
               else if (letter === userAnswer && userAnswer !== q.answer) cls = 'wrong';
-            } else if (!isExam && letter === userAnswer) cls = 'selected';
+            } else if (letter === userAnswer) cls = 'selected';
             return `<div class="option-item ${cls}" data-letter="${letter}">
               <div class="option-letter">${letter}</div>
               <div class="option-text">${Utils.esc(o)}</div>
-              ${answered && letter === q.answer ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
+              ${!isExam && answered && letter === q.answer ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
             </div>`;
           }).join('')}
         </div>`;
@@ -2634,14 +2718,16 @@ const Pages = {
         qBody = `<div class="option-list">
           ${opts.map(o => {
             let cls = '';
-            if (answered) {
+            if (isExam) {
+              if (o === userAnswer) cls = 'selected';
+            } else if (answered) {
               if (o === q.answer) cls = 'correct';
               else if (o === userAnswer && userAnswer !== q.answer) cls = 'wrong';
-            } else if (!isExam && o === userAnswer) cls = 'selected';
+            } else if (o === userAnswer) cls = 'selected';
             return `<div class="option-item ${cls}" data-letter="${o}">
               <div class="option-letter">${o === '正确' ? '✓' : '✗'}</div>
               <div class="option-text">${o}</div>
-              ${answered && o === q.answer ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
+              ${!isExam && answered && o === q.answer ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
             </div>`;
           }).join('')}
         </div>`;
@@ -2706,8 +2792,11 @@ const Pages = {
               opt.classList.add('selected');
             } else {
               if (answered) return;
+              // 练习模式：单选/判断 只高亮选中，不立即提交，等用户点"提交"按钮
               userAnswer = letter;
-              submitAnswer();
+              body.querySelectorAll('.option-item').forEach(o => o.classList.remove('selected'));
+              opt.classList.add('selected');
+              renderFooter(); // 更新提交按钮状态
             }
           };
         });
@@ -2735,10 +2824,16 @@ const Pages = {
           <button class="btn btn-outline" ${isFirst?'disabled':''} onclick="this.closest('.page')._prev()" style="${isFirst?'opacity:0.4':''}">上题</button>
           ${!answered
             ? (q?.type === '填空'
-                ? `<button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitFill()">提交</button>`
+                ? `<span style="display:flex;gap:8px;flex:1">
+                    <button class="btn btn-outline flex-1" onclick="this.closest('.page')._skipQ()" style="color:var(--text3)">跳过</button>
+                    <button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitFill()">提交</button>
+                  </span>`
                 : isMulti
                   ? `<button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitMulti()" ${multiSelected.length===0?'disabled style="opacity:0.4"':''}>提交答案</button>`
-                  : `<button class="btn btn-primary flex-1" disabled style="opacity:0.4">选择答案</button>`)
+                  : `<span style="display:flex;gap:8px;flex:1">
+                      <button class="btn btn-outline flex-1" onclick="this.closest('.page')._skipQ()" style="color:var(--text3)">跳过</button>
+                      <button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitSingle()" ${!userAnswer?'disabled style="opacity:0.4"':''}>提交</button>
+                    </span>`)
             : `<button class="btn btn-primary flex-1" onclick="this.closest('.page').${isLast ? '_finish' : '_next'}()">${isLast ? '完成' : '下一题'}</button>`
           }
         `;
@@ -2958,6 +3053,24 @@ const Pages = {
       if (!userAnswer) { Utils.toast('请输入答案'); return; }
       submitAnswer();
     };
+    el._skipQ = async () => {
+      // 跳过 = 不会做，等同于答错：增加 wrongCount 和权重，纳入错题本
+      const q = questions[curIdx];
+      if (q && q.id) {
+        const freshQ = (await DB.getAllQuestions()).find(x => x.id === q.id) || q;
+        freshQ.wrongCount = (freshQ.wrongCount || 0) + 1;
+        freshQ.weight = Math.min(10, (freshQ.weight || 1) + 0.5 + freshQ.wrongCount * 0.1);
+        Object.assign(q, freshQ);
+        answers[curIdx] = '__skipped__'; // 标记为跳过
+        await DB.saveQuestion(freshQ);
+      }
+      if (curIdx < questions.length - 1) { curIdx++; multiSelected = []; userAnswer = null; renderQ(); }
+      else el._finish();
+    };
+    el._submitSingle = () => {
+      if (!userAnswer) { Utils.toast('请先选择答案'); return; }
+      submitAnswer();
+    };
     el._submitMulti = () => {
       if (!multiSelected.length) { Utils.toast('请至少选择一个选项'); return; }
       userAnswer = [...multiSelected].sort();
@@ -3004,13 +3117,21 @@ const Pages = {
 const Actions = {
   // 切换主题
   async toggleTheme() {
-    State.darkMode = !State.darkMode;
-    document.documentElement.setAttribute('data-theme', State.darkMode ? 'dark' : '');
-    document.querySelector('meta[name="color-scheme"]').setAttribute('content', State.darkMode ? 'only dark' : 'only light');
-    await DB.setMeta('darkMode', State.darkMode);
-    // 更新所有主题按钮图标
-    document.querySelectorAll('#theme-btn').forEach(btn => {
-      btn.innerHTML = State.darkMode ? Icons.sun : Icons.moon;
+    const html = document.documentElement;
+    // 第一帧：加过渡类，让浏览器应用 transition 规则
+    html.classList.add('theme-transitioning');
+    // 强制 reflow，确保浏览器记录当前颜色状态作为动画起点
+    void html.offsetHeight;
+    // 第二帧：再改主题，浏览器就能从"旧颜色"过渡到"新颜色"
+    requestAnimationFrame(() => {
+      State.darkMode = !State.darkMode;
+      html.setAttribute('data-theme', State.darkMode ? 'dark' : '');
+      document.querySelector('meta[name="color-scheme"]').setAttribute('content', State.darkMode ? 'only dark' : 'only light');
+      DB.setMeta('darkMode', State.darkMode);
+      document.querySelectorAll('#theme-btn').forEach(btn => {
+        btn.innerHTML = State.darkMode ? Icons.sun : Icons.moon;
+      });
+      setTimeout(() => html.classList.remove('theme-transitioning'), 400);
     });
   },
 
@@ -3092,17 +3213,18 @@ const Actions = {
       exportTime: new Date().toISOString(),
       folders: folders.map(f => ({
         name: f.name,
-        questions: allQs.filter(q => q.folderId === f.id).map(q => ({
-          type: q.type,
-          question: q.question,
-          options: q.options,
-          answer: q.answer,
-          answers: q.answers,
-          explanation: q.explanation,
-          wrongCount: q.wrongCount,
-          rightCount: q.rightCount,
-          starred: q.starred,
-        }))
+        questions: allQs.filter(q => q.folderId === f.id).map(q => {
+          const out = { type: q.type, question: q.question, answer: q.answer };
+          if (q.options && q.options.length) out.options = q.options;
+          if (q.answers && q.answers.length > 1) out.answers = q.answers;
+          if (q.explanation) out.explanation = q.explanation;
+          // 保留学习统计（可选，导入时恢复进度用）
+          if (q.wrongCount) out.wrongCount = q.wrongCount;
+          if (q.rightCount) out.rightCount = q.rightCount;
+          if (q.starred) out.starred = true;
+          if (q.weight && q.weight !== 1) out.weight = q.weight;
+          return out;
+        })
       }))
     };
     const json = JSON.stringify(data, null, 2);
@@ -3151,23 +3273,6 @@ const Actions = {
       overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
       document.body.appendChild(overlay);
     }
-  },
-
-  // 做题中修正答案（支持多答案）
-  editAnswerInQuiz(q, onSaved) {
-    const allAnswers = q.answers && q.answers.length ? [...q.answers] : [q.answer || ""];
-    const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
-    const rows = allAnswers.map((a, i) => `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px" data-ans-row="${i}">
-        <span style="font-size:13px;color:var(--text3);width:40px;flex-shrink:0">答案${i+1}</span>
-        <input class="form-input flex-1" style="flex:1" value="${Utils.esc(a)}" data-ans-idx="${i}">
-        ${allAnswers.length > 1 ? `<button onclick="this.closest('[data-ans-row]').remove()" style="color:var(--danger);padding:4px;flex-shrink:0">${Icons.close}</button>` : ""}
-      </div>`).join("");
-    overlay.innerHTML = `placeholder_EDITANSFORM`;
-    overlay._onSaved = onSaved;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-    document.body.appendChild(overlay);
   },
 
   // 做题中修正答案（支持多答案）
@@ -3234,7 +3339,7 @@ const Actions = {
       <div class="modal-dialog" style="max-width:340px">
         <div class="modal-title">新建文件夹</div>
         <div class="modal-sub">输入文件夹名称</div>
-        <input class="form-input" id="new-folder-name" placeholder="文件夹名称" style="margin-bottom:16px" autofocus>
+        <input class="form-input" id="new-folder-name" placeholder="文件夹名称" maxlength="20" style="margin-bottom:16px" autofocus>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
           <button class="btn btn-primary flex-1" onclick="Actions._doCreateFolder(this)">创建</button>
@@ -3265,6 +3370,9 @@ const Actions = {
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-outline btn-block" onclick="Actions._renameFolder(${folderId},this)">
             ${Icons.edit} 重命名
+          </button>
+          <button class="btn btn-outline btn-block" onclick="Actions._customizeFolder(${folderId},this)">
+            🎨 自定义外观
           </button>
           <button class="btn btn-outline btn-block" style="color:var(--danger);border-color:var(--danger)" 
             onclick="Actions._deleteFolder(${folderId},this)">
@@ -3306,10 +3414,77 @@ const Actions = {
   },
   async _deleteFolder(id, btn) {
     btn.closest('.modal-overlay').remove();
-    if (!confirm('确定删除此文件夹及其所有题目？此操作不可撤销。')) return;
+    const fDelOk = await Utils.confirm('删除文件夹', '确定删除此文件夹及其所有题目？不可撤销', '确认删除', true);
+    if (!fDelOk) return;
     await DB.deleteFolder(id);
     Utils.toast('已删除');
     await Nav.refreshCurrent();
+  },
+
+  async _customizeFolder(id, btn) {
+    btn.closest('.modal-overlay').remove();
+    const folders = await DB.getFolders();
+    const f = folders.find(x => x.id === id);
+    if (!f) return;
+    const presetColors = [
+      '#EEF2FF','#F0FDF4','#FFF7ED','#FDF2F8','#F0FDFA',
+      '#FEF9C3','#F1F5F9','#FEE2E2','#ECFDF5','#FFF1F2'
+    ];
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title" style="margin-bottom:14px">自定义外观</div>
+        <div class="form-group">
+          <label class="form-label">文件夹图标（一个字符：汉字/字母/表情）</label>
+          <input class="form-input" id="folder-icon-input" maxlength="2"
+            placeholder="留空则显示默认图标"
+            value="${Utils.esc(f.icon||'')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">背景颜色</label>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            ${presetColors.map(color => `
+              <div data-color="${color}" style="width:36px;height:36px;border-radius:10px;background:${color};cursor:pointer;border:2px solid ${f.color===color?'var(--accent)':'transparent'};box-sizing:border-box"></div>
+            `).join('')}
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <label class="form-label" style="margin:0;white-space:nowrap">自定义颜色</label>
+            <input type="color" id="folder-color-picker" value="${f.color||'#EEF2FF'}"
+              style="width:44px;height:36px;border:none;padding:0;cursor:pointer;border-radius:8px">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-primary flex-1" id="save-folder-style">保存</button>
+        </div>
+      </div>`;
+    let pickedColor = f.color || '#EEF2FF';
+    // 预设颜色点击
+    overlay.querySelectorAll('[data-color]').forEach(chip => {
+      chip.onclick = () => {
+        overlay.querySelectorAll('[data-color]').forEach(c2 => c2.style.borderColor = 'transparent');
+        chip.style.borderColor = 'var(--accent)';
+        pickedColor = chip.dataset.color;
+        overlay.querySelector('#folder-color-picker').value = pickedColor;
+      };
+    });
+    overlay.querySelector('#folder-color-picker').oninput = e => { pickedColor = e.target.value; };
+    overlay.querySelector('#save-folder-style').onclick = async () => {
+      const iconRaw = overlay.querySelector('#folder-icon-input').value;
+      const icon = [...iconRaw][0] || '';
+      f.icon = icon;
+      f.color = pickedColor;
+      await DB.saveFolder(f);
+      overlay.remove();
+      Utils.toast('外观已更新');
+      // 强制刷新当前页和首页
+      await Nav.refreshCurrent();
+      await Nav.refreshHome();
+    };
+    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
   },
 
   // 批量操作
@@ -3397,7 +3572,8 @@ const Actions = {
   },
   async _batchDelete(ids, btn) {
     btn.closest('.modal-overlay').remove();
-    if (!confirm(`确定删除选中的 ${ids.length} 道题目？`)) return;
+    const batchDelOk = await Utils.confirm('删除题目', `确定删除选中的 ${ids.length} 道题目？不可恢复`, '确认删除', true);
+    if (!batchDelOk) return;
     for (const id of ids) await DB.deleteQuestion(id);
     Utils.toast(`已删除 ${ids.length} 道题目`);
     await Nav.refreshCurrent();
@@ -3405,7 +3581,8 @@ const Actions = {
 
   // 重置所有统计
   async resetAllStats() {
-    if (!confirm('确定重置所有统计数据（积分、答题记录）？题目不会被删除。')) return;
+    const resetOk = await Utils.confirm('重置所有统计', '积分、答题记录将清零，题目不会被删除', '确认重置', true);
+    if (!resetOk) return;
     const qs = await DB.getAllQuestions();
     for (const q of qs) {
       q.wrongCount = 0; q.rightCount = 0; q.weight = 1;
@@ -3416,8 +3593,35 @@ const Actions = {
     await DB.setMeta('totalRight', 0);
     await DB.setMeta('totalWrong', 0);
     Utils.toast('统计已重置');
-    await Nav.pop();
-    await Nav.push('stats', {});
+    await Nav.refreshCurrent();
+  },
+
+  // 删除所有数据（核弹选项）
+  async nukeAllData() {
+    const ok1 = await Utils.confirm('删除所有数据', '这将删除所有题目、文件夹和统计记录，完全不可恢复！', '我知道后果，继续', true);
+    if (!ok1) return;
+    const ok2 = await Utils.confirm('最后确认', '确定要清空所有数据吗？', '确认清空', true);
+    if (!ok2) return;
+    // 显示全屏进度遮罩，让用户知道操作正在进行
+    const blocker = document.createElement('div');
+    blocker.style.cssText = 'position:fixed;inset:0;z-index:99999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
+    blocker.innerHTML = `
+      <div style="font-size:40px">🗑️</div>
+      <div style="font-size:16px;font-weight:600;color:var(--text)">正在清除所有数据...</div>
+      <div style="font-size:13px;color:var(--text3)">请稍候，即将重新加载</div>`;
+    document.body.appendChild(blocker);
+    // 必须先关闭当前DB连接，否则deleteDatabase会触发onblocked永远卡住
+    try { DB._closeConnection(); } catch(e) {}
+    await new Promise(resolve => {
+      const req = indexedDB.deleteDatabase('QuizAppDB');
+      req.onsuccess = resolve;
+      req.onerror = resolve;
+      req.onblocked = () => {
+        // 被阻塞时强制关闭所有连接后重试
+        setTimeout(resolve, 300);
+      };
+    });
+    location.reload();
   },
 };
 
@@ -3432,7 +3636,7 @@ window.addEventListener('popstate', (e) => {
   history.pushState(null, '', location.href);
   const app = document.getElementById('app');
   const pages = app.querySelectorAll('.page');
-  if (pages.length > 1) Nav.home();
+  if (pages.length > 1) Nav.pop();
   // 如果已在首页，什么都不做（阻止退出）
 });
 
