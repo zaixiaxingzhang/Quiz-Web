@@ -2,10 +2,27 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <!-- 强制阻止浏览器系统深色模式覆盖 -->
 <meta name="color-scheme" content="only light">
 <title>刷题宝</title>
+<script>
+  // 同步读取主题，避免首帧白屏/闪烁（在所有样式加载前执行）
+  (function(){
+    try {
+      if (localStorage.getItem('quizapp_darkMode') === 'true') {
+        document.documentElement.setAttribute('data-theme','dark');
+        // color-scheme meta 可能还没解析到，用 getAttribute 安全设置
+        var metas = document.getElementsByTagName('meta');
+        for (var i=0;i<metas.length;i++){
+          if (metas[i].getAttribute('name')==='color-scheme'){
+            metas[i].setAttribute('content','only dark'); break;
+          }
+        }
+      }
+    } catch(e){}
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -41,9 +58,9 @@
   --transition: 0.3s cubic-bezier(0.4,0,0.2,1);
 }
 [data-theme="dark"] {
-  --bg: #000000;
-  --bg2: #111111;
-  --card: #1C1C1E;
+  --bg: #1C1C1E;
+  --bg2: #2C2C2E;
+  --card: #252528;
   --card2: #2C2C2E;
   --border: #3A3A3C;
   --text: #F5F5F7;
@@ -59,7 +76,7 @@
   --warn-light: #2D1F00;
   --success: #4ADE80;
   --success-light: #052E16;
-  --appbar: #1C1C1E;
+  --appbar: #252528;
   --appbar-border: #3A3A3C;
   --shadow: 0 2px 12px rgba(0,0,0,0.4);
   --shadow2: 0 4px 24px rgba(0,0,0,0.6);
@@ -68,7 +85,7 @@
 /* =========================================================
    基础重置
    ========================================================= */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
 html, body {
   width: 100%; height: 100%; overflow: hidden;
   background: var(--bg);
@@ -78,7 +95,7 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
 }
-button { font-family: inherit; cursor: pointer; border: none; background: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; outline: none; -webkit-tap-highlight-color: transparent; }
 input, textarea, select { font-family: inherit; color: var(--text); background: transparent; border: none; outline: none; }
 
 /* =========================================================
@@ -100,7 +117,8 @@ input, textarea, select { font-family: inherit; color: var(--text); background: 
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  will-change: transform;
+  /* will-change:transform 已移除：旧 WebView 下会创建新层叠上下文，
+     导致 position:fixed 的弹窗相对 .page 定位而非视口，跑到左上角 */
   /* 默认不可见，由JS控制显示 */
 }
 /* 页面进入动画：从右滑入 */
@@ -502,11 +520,11 @@ input, textarea, select { font-family: inherit; color: var(--text); background: 
   margin-bottom: 20px;
 }
 /* 单选/判断选项 */
-.option-list { display: flex; flex-direction: column; gap: 10px; }
+.option-list { display: flex; flex-direction: column; }
+.option-item + .option-item { margin-top: 10px; }
 .option-item {
   display: flex;
   align-items: center;
-  gap: 12px;
   padding: 14px 14px;
   background: var(--card);
   border-radius: var(--radius2);
@@ -516,6 +534,7 @@ input, textarea, select { font-family: inherit; color: var(--text); background: 
   transition: border-color 0.2s, background 0.2s;
 }
 .option-item:active { background: var(--card2); }
+.option-letter + * { margin-left: 12px; }
 .option-item.selected { border-color: var(--accent); background: var(--accent-light); }
 .option-item.correct { border-color: var(--success); background: var(--success-light); }
 .option-item.wrong { border-color: var(--danger); background: var(--danger-light); }
@@ -576,14 +595,14 @@ input, textarea, select { font-family: inherit; color: var(--text); background: 
   position: absolute;
   bottom: 0; left: 0; right: 0;
   padding: 10px 14px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  padding-bottom: 10px;
   background: var(--appbar);
   border-top: 1px solid var(--appbar-border);
   display: flex;
-  gap: 10px;
   z-index: 10;
 }
 .quiz-footer .btn { flex: 1; }
+.quiz-footer .btn + .btn { margin-left: 10px; }
 
 /* =========================================================
    考试计时器
@@ -679,25 +698,31 @@ input, textarea, select { font-family: inherit; color: var(--text); background: 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0,0,0,0.55);
   z-index: 1000;
   display: flex;
   align-items: flex-end;
   padding: 0;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   animation: fadeIn 0.2s ease;
+}
+/* 仅在支持 backdrop-filter 的 WebView 上启用模糊，旧版自动降级为纯半透明 */
+@supports (-webkit-backdrop-filter: blur(4px)) or (backdrop-filter: blur(4px)) {
+  .modal-overlay {
+    background: rgba(0,0,0,0.35);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
 }
 .modal-overlay { justify-content: center; }
 .modal-overlay.center { align-items: center; padding: 20px; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(4px); } }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
 .modal-sheet {
   width: 100%;
   background: var(--card);
   border-radius: 20px 20px 0 0;
   padding: 20px 18px;
-  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  padding-bottom: 20px;
   animation: slideUp 0.3s cubic-bezier(0.4,0,0.2,1);
   max-height: 80vh;
   overflow-y: auto;
@@ -710,6 +735,31 @@ input, textarea, select { font-family: inherit; color: var(--text); background: 
   padding: 20px 18px;
   animation: scaleIn 0.2s cubic-bezier(0.4,0,0.2,1);
 }
+
+/* ── Modal close animations ────────────────────────────────── */
+@keyframes slideDown   { from { transform: translateY(0); }        to { transform: translateY(105%); } }
+@keyframes scaleOut    { from { transform: scale(1); opacity: 1; } to { transform: scale(.92); opacity: 0; } }
+@keyframes fadeOutBg   { from { opacity: 1; }                      to { opacity: 0; } }
+.modal-overlay.closing               { animation: fadeOutBg .25s ease forwards; pointer-events: none; }
+.modal-overlay.closing .modal-sheet  { animation: slideDown .25s cubic-bezier(.4,0,.2,1) forwards; }
+.modal-overlay.closing .modal-dialog { animation: scaleOut  .2s  cubic-bezier(.4,0,.2,1) forwards; }
+
+/* ── Table styles for AI / rendered content ─────────────────── */
+.ai-msg table, .rendered-content table {
+  border-collapse: collapse; width: 100%;
+  font-size: 13px; margin: 8px 0; overflow: hidden; border-radius: 6px;
+}
+.ai-msg td, .ai-msg th,
+.rendered-content td, .rendered-content th {
+  border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+}
+.ai-msg th, .rendered-content th {
+  background: var(--surface2); font-weight: 600;
+}
+.ai-msg tr:nth-child(even), .rendered-content tr:nth-child(even) {
+  background: var(--bg2);
+}
+
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes scaleIn { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .modal-title {
@@ -920,18 +970,98 @@ select.form-input { appearance: none; }
 .fs-14 { font-size: 14px; }
 .fs-13 { font-size: 13px; }
 
-/* 主题切换过渡 - 所有元素同时变色 */
+/* 主题切换：仅当前顶层页面过渡，其余页面瞬间切换 */
+/* 主题切换过渡 */
 html.theme-transitioning,
 html.theme-transitioning body,
 html.theme-transitioning *,
 html.theme-transitioning *::before,
 html.theme-transitioning *::after {
   transition: background-color 0.3s ease, color 0.3s ease,
-              border-color 0.3s ease, box-shadow 0.3s ease !important;
+              border-color 0.3s ease !important;
 }
 
 /* safe area */
-.page-content { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+.page-content { padding-bottom: 24px; }
+
+/* ── 题库体检专用样式 ─────────────────────────────────────── */
+.ck-surface  { background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+.ck-surface2 { background: var(--surface2); }
+.ck-border   { border-color: var(--border); }
+.ck-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px; margin-bottom: 20px;
+}
+.ck-summary-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px; text-align: center;
+}
+.ck-summary-num {
+  font-size: 26px; font-weight: 900; font-family: monospace;
+  line-height: 1; margin-bottom: 4px;
+}
+.ck-summary-label { font-size: 11px; color: var(--text3); }
+.ck-health-wrap {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; margin-bottom: 18px;
+}
+.ck-health-bar {
+  height: 7px; background: var(--border);
+  border-radius: 4px; overflow: hidden; margin: 8px 0 6px;
+}
+.ck-health-fill { height: 100%; border-radius: 4px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+.ck-section-label {
+  font-size: 10px; font-family: monospace; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text3); margin: 20px 0 8px;
+}
+.ck-issue-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; margin-bottom: 10px;
+}
+.ck-issue-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; cursor: pointer; user-select: none;
+  transition: background .12s;
+}
+.ck-issue-header:hover { background: var(--surface2); }
+.ck-issue-header:active { background: var(--surface2); }
+.ck-badge {
+  font-size: 11px; font-weight: 700; font-family: monospace;
+  padding: 2px 8px; border-radius: 5px; flex-shrink: 0;
+}
+.ck-badge-red    { background: var(--danger-light,rgba(239,68,68,.15)); color: var(--danger); }
+.ck-badge-yellow { background: rgba(234,179,8,.15); color: #eab308; }
+.ck-issue-name   { font-size: 14px; font-weight: 600; flex: 1; }
+.ck-chevron      { color: var(--text3); font-size: 16px; transition: transform .2s; flex-shrink:0; }
+.ck-chevron.open { transform: rotate(90deg); }
+.ck-issue-body   {
+  border-top: 1px solid var(--border);
+  max-height: 0; overflow: hidden; transition: max-height .35s ease;
+}
+.ck-issue-body.open { max-height: 9999px; }
+.ck-q-item {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px; line-height: 1.6;
+}
+.ck-q-item:last-child { border-bottom: none; }
+.ck-q-folder { font-size: 10px; font-family: monospace; color: var(--text3); margin-bottom: 2px; }
+.ck-q-text   { color: var(--text); }
+.ck-q-detail { font-size: 12px; color: var(--text2); margin-top: 3px; }
+.ck-tag {
+  display: inline-block; font-size: 11px; padding: 1px 7px;
+  border-radius: 4px; margin-right: 4px; margin-top: 4px; font-family: monospace;
+}
+.ck-tag-red    { background: var(--danger-light,rgba(239,68,68,.15)); color: var(--danger); }
+.ck-tag-yellow { background: rgba(234,179,8,.15); color: #eab308; }
+.ck-tag-blue   { background: rgba(59,130,246,.15); color: #3b82f6; }
+.ck-tag-gray   { background: var(--surface2); color: var(--text2); }
+.ck-file-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 16px;
+}
+
 </style>
   
 </head>
@@ -943,7 +1073,6 @@ html.theme-transitioning *::after {
 <div id="app"></div>
 
 <!-- 隐藏的文件输入（用于导入JSON） -->
-<input type="file" id="import-input" accept=".json" style="display:none">
 
 <script>
 /* =========================================================
@@ -1181,10 +1310,29 @@ const Utils = {
   },
   srsSample(items, n) {
     const now = Date.now();
-    const fresh  = items.filter(x => !x.srsNextReview);
-    const due    = items.filter(x => x.srsNextReview && x.srsNextReview <= now).sort((a,b) => a.srsNextReview - b.srsNextReview);
-    const notDue = items.filter(x => x.srsNextReview && x.srsNextReview > now).sort((a,b) => a.srsNextReview - b.srsNextReview);
-    return [...due, ...fresh, ...notDue].slice(0, Math.min(n, items.length));
+    const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+    const due    = shuffle(items.filter(x => x.srsNextReview && x.srsNextReview <= now));
+    const fresh  = shuffle(items.filter(x => !x.srsNextReview));
+    const notDue = items.filter(x => x.srsNextReview && x.srsNextReview > now)
+                        .sort((a, b) => a.srsNextReview - b.srsNextReview);
+    // 保证新题（fresh）始终有机会出现：
+    // due 最多占 60% 名额，剩余 40% 优先给 fresh，再用 notDue 填满
+    const total    = Math.min(n, items.length);
+    const dueCap   = Math.min(due.length,   Math.ceil(total * 0.6));
+    const freshCap = Math.min(fresh.length, total - dueCap);
+    const picked   = [
+      ...due.slice(0, dueCap),
+      ...fresh.slice(0, freshCap),
+    ];
+    // 还没填满就继续加 notDue，再加剩余 due
+    const rest = [
+      ...notDue,
+      ...due.slice(dueCap),
+      ...fresh.slice(freshCap),
+    ];
+    const result = [...picked, ...rest].slice(0, total);
+    // 最后整体随机洗牌，避免 due 永远排在前面
+    return shuffle(result);
   },
   unseenSample(items, n) {
     const unseen = items.filter(x => !x.rightCount && !x.wrongCount).sort(() => Math.random()-0.5);
@@ -1203,7 +1351,15 @@ const Utils = {
   // 延迟
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
   // Toast提示
-  toast(msg) {
+  // 带关闭动画的 modal 移除
+  closeModal(ov) {
+    if (!ov || !ov.isConnected) return;
+    ov.classList.add('closing');
+    const done = () => { if (ov.isConnected) ov.remove(); };
+    ov.addEventListener('animationend', done, { once: true });
+    setTimeout(done, 350); // fallback
+  },
+    toast(msg) {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
     const t = document.createElement('div');
@@ -1225,9 +1381,9 @@ const Utils = {
           <button class="btn btn-outline flex-1" id="uc-cancel">取消</button>
           <button class="btn ${danger?'btn-danger':'btn-primary'} flex-1" id="uc-ok">${Utils.esc(okText)}</button>
         </div></div>`;
-      ov.querySelector('#uc-ok').onclick = () => { ov.remove(); resolve(true); };
-      ov.querySelector('#uc-cancel').onclick = () => { ov.remove(); resolve(false); };
-      ov.onclick = e => { if(e.target===ov) { ov.remove(); resolve(false); } };
+      ov.querySelector('#uc-ok').onclick = () => { Utils.closeModal(ov); setTimeout(() => resolve(true), 300); };
+      ov.querySelector('#uc-cancel').onclick = () => { Utils.closeModal(ov); setTimeout(() => resolve(false), 300); };
+      ov.onclick = e => { if(e.target===ov) { Utils.closeModal(ov); setTimeout(() => resolve(false), 300); } };
       document.body.appendChild(ov);
     });
   },
@@ -1240,13 +1396,13 @@ const Utils = {
      填空题智能比对算法
      支持：顺序无关、标点/空格忽略、多答案数组、模糊容错
      ========================================================= */
-  matchFill(userRaw, correctRaw) {
+  matchFill(userRaw, correctRaw, mode) {
     if (!userRaw || !correctRaw) return false;
+    // mode: 'exact' 精准匹配，默认 'fuzzy' 关键词匹配
 
     // 支持多答案：correctRaw 可以是字符串或数组
-    // 数组中任意一个答案匹配即算对
     if (Array.isArray(correctRaw)) {
-      return correctRaw.some(ans => Utils.matchFill(userRaw, ans));
+      return correctRaw.some(ans => Utils.matchFill(userRaw, ans, mode));
     }
 
     // 标准化：去首尾空白、全角转半角、转小写
@@ -1257,21 +1413,26 @@ const Utils = {
         .replace(/\u3000/g, ' ');
     }
 
+    const user    = normalize(userRaw);
+    const correct = normalize(correctRaw);
+
+    // ══ 精准模式：去首尾空格和全角后完全一致才算对 ══
+    if (mode === 'exact') {
+      return user === correct;
+    }
+
+    // ══ 关键词模式（原逻辑） ══
+
     // 去除所有标点、空格，只留汉字和字母数字
     function stripAll(s) {
       return s.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
     }
-
     // 按常见分隔符拆词
     function tokenize(s) {
       return s.split(/[,，、\/\\；;:\s]+/).map(t => t.trim()).filter(Boolean);
     }
-
-    // 字符排序（用于检测同字异序）
-    function sortChars(s) {
-      return s.split('').sort().join('');
-    }
-
+    // 字符排序
+    function sortChars(s) { return s.split('').sort().join(''); }
     // Levenshtein 编辑距离
     function editDist(a, b) {
       const m = a.length, n = b.length;
@@ -1284,54 +1445,51 @@ const Utils = {
       return dp[m][n];
     }
 
-    const user    = normalize(userRaw);
-    const correct = normalize(correctRaw);
-    const uStrip  = stripAll(user);
-    const cStrip  = stripAll(correct);
-
-    // ① 完全一致
+    const uStrip = stripAll(user);
+    const cStrip = stripAll(correct);
     if (user === correct) return true;
-
-    // ② 去标点空格后一致
     if (uStrip === cStrip) return true;
-
-    // ③ 字符排序后一致（同字异序，如"整体式模块式"↔"模块式整体式"）
     if (uStrip.length === cStrip.length && sortChars(uStrip) === sortChars(cStrip)) return true;
 
-    // ④ 拆词后集合匹配（顺序无关，每词允许模糊）
     const uTokens = tokenize(uStrip.length ? uStrip : user);
     const cTokens = tokenize(cStrip.length ? cStrip : correct);
-
     if (uTokens.length > 0 && cTokens.length > 0) {
       const matched = new Set();
       let allMatched = true;
-
       for (const ct of cTokens) {
         let found = false;
         for (let i = 0; i < uTokens.length; i++) {
           if (matched.has(i)) continue;
           const ut = uTokens[i];
           const maxDist = ct.length <= 2 ? 0 : ct.length <= 4 ? 1 : 2;
-          if (ut === ct || editDist(ut, ct) <= maxDist) {
-            matched.add(i); found = true; break;
-          }
+          if (ut === ct || editDist(ut, ct) <= maxDist) { matched.add(i); found = true; break; }
         }
         if (!found) { allMatched = false; break; }
       }
       if (allMatched && matched.size === cTokens.length) return true;
-
-      // ⑤ 拆词再拼接去标点（应对漏分隔符：直接连写）
-      const uJoin = uTokens.join('');
-      const cJoin = cTokens.join('');
+      const uJoin = uTokens.join(''), cJoin = cTokens.join('');
       if (uJoin === cJoin) return true;
       if (sortChars(uJoin) === sortChars(cJoin)) return true;
     }
-
-    // ⑥ 整体编辑距离容错（短答案1字、中等2字、长答案3字）
     const threshold = cStrip.length <= 3 ? 1 : cStrip.length <= 7 ? 2 : 3;
     if (editDist(uStrip, cStrip) <= threshold) return true;
-
     return false;
+  },
+
+  syncStatusBar(isDark) {
+    // 更新 theme-color meta（浏览器环境）
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      document.head.appendChild(meta);
+    }
+    meta.content = isDark ? '#1C1C1E' : '#FFFFFF';
+    // 通知 Android：同时更新状态栏图标颜色 + 状态栏/导航栏背景色
+    if (window.AndroidBridge) {
+      try { window.AndroidBridge.setStatusBarDark(isDark); } catch(_) {}
+      try { window.AndroidBridge.syncBarColors(isDark); } catch(_) {}
+    }
   },
 };
 
@@ -1497,17 +1655,25 @@ const AI = {
   renderFull(rawText) {
     if (!rawText) return '';
 
-    // Step0: 解码 HTML 实体（保存的解析可能含 &quot; &#39; 等）
-    rawText = rawText
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'");
+    // Step0: 解码 HTML 实体（用 textarea trick 完整解码所有实体，包括 &#39; &#x27; 等）
+    try {
+      const _ta = document.createElement('textarea');
+      _ta.innerHTML = rawText;
+      rawText = _ta.value;
+    } catch(_) {
+      rawText = rawText
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'")
+        .replace(/&#(\d+);/g, (_,n) => String.fromCharCode(+n))
+        .replace(/&#x([0-9a-f]+);/gi, (_,h) => String.fromCharCode(parseInt(h,16)));
+    }
 
     // Step1: 提取 link("xx") 占位，防止被 Markdown 处理掉
     const linkPlaceholders = [];
     let text = rawText.replace(/link\(["']([^"')]+)["']\)/g, (_, kw) => {
       const idx = linkPlaceholders.length;
       linkPlaceholders.push(kw);
-      return ` LINK${idx} `;
+      return `«LINK${idx}»`;
     });
 
     // Step2: 提取 LaTeX 占位（防止被 marked 转义）
@@ -1589,9 +1755,10 @@ const AI = {
     });
 
     // Step6: 还原 link()
-    html = html.replace(/ LINK(\d+) /g, (_, i) => {
+    html = html.replace(/«LINK(\d+)»/g, (_, i) => {
       const kw = linkPlaceholders[+i];
-      return `<span onclick="window.open('https://www.baidu.com/s?wd='+encodeURIComponent(${JSON.stringify(kw)}),'_blank')" style="color:var(--accent);text-decoration:underline;cursor:pointer">${Utils.esc(kw)}</span>`;
+      const linkUrl = 'https://www.baidu.com/s?wd=' + encodeURIComponent(kw);
+      return '<span data-link-url="' + Utils.esc(linkUrl) + '" onclick="var u=this.dataset.linkUrl;if(window.AndroidBridge&&window.AndroidBridge.openUrl)window.AndroidBridge.openUrl(u);else window.open(u,\'_blank\')" style="color:var(--accent);text-decoration:underline;cursor:pointer">' + Utils.esc(kw) + '</span>';
     });
 
     return html;
@@ -1624,11 +1791,12 @@ const AI = {
             <input id="ai-followup" class="form-input" placeholder="继续追问..." style="flex:1;padding:8px 10px;font-size:13px">
             <button id="ai-send" class="btn btn-primary" style="padding:8px 14px;font-size:13px">发送</button>
           </div>
-          <button class="btn btn-outline btn-block" style="font-size:13px" onclick="this.closest('.modal-overlay').remove()">关闭</button>
+          <button class="btn btn-outline btn-block" style="font-size:13px" id="ai-close-btn">关闭</button>
         </div>
       </div>`;
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
     document.body.appendChild(ov);
+    ov.querySelector('#ai-close-btn').onclick = () => Utils.closeModal(ov);
 
     const aiBody = ov.querySelector('#ai-body');
     const followupInput = ov.querySelector('#ai-followup');
@@ -1638,7 +1806,7 @@ const AI = {
       const isAI = role === 'assistant';
       const bubble = document.createElement('div');
       bubble.style.cssText = `margin-bottom:10px;${isAI ? '' : 'text-align:right'}`;
-      bubble.innerHTML = `<div style="display:inline-block;max-width:92%;padding:8px 12px;border-radius:${isAI?'4px 12px 12px 12px':'12px 4px 12px 12px'};background:${isAI?'var(--surface2)':'var(--accent-light)'};color:var(--text);font-size:13px;line-height:1.7;text-align:left;white-space:pre-wrap">${loading ? '<span style="color:var(--text3)">⏳ 思考中...</span>' : (isAI ? AI.renderText(text) : Utils.esc(text))}</div>`;
+      bubble.innerHTML = `<div class="${isAI?'ai-msg':''}" style="${isAI?'display:block;width:100%':'display:inline-block;max-width:88%'};padding:8px 12px;border-radius:${isAI?'4px 12px 12px 12px':'12px 4px 12px 12px'};background:${isAI?'var(--surface2)':'var(--accent-light)'};color:var(--text);font-size:13px;line-height:1.7;text-align:left;${isAI?'':'white-space:pre-wrap'}">${loading ? '<span style="color:var(--text3)">⏳ 思考中...</span>' : (isAI ? AI.renderText(text) : Utils.esc(text))}</div>`;
       aiBody.appendChild(bubble);
       // 只在首次（气泡刚出现）滚到底，之后用户手动滚
       aiBody.scrollTop = aiBody.scrollHeight;
@@ -1702,29 +1870,64 @@ const AI = {
     })();
 
     function updateSaveBtn() {
-      const lastAI = [...history].reverse().find(m => m.role === 'assistant');
-      if (!lastAI) { saveBar.style.display = 'none'; return; }
+      const aiMsgs = history.filter(m => m.role === 'assistant');
+      if (!aiMsgs.length) { saveBar.style.display = 'none'; return; }
       saveBar.style.display = '';
-      saveBar.querySelector('#ai-save-explanation').onclick = async () => {
-        const text = lastAI.content;
-        if (q.explanation && q.explanation.trim()) {
-          // 已有解析，询问覆盖还是追加
-          const bar = saveBar.querySelector('#ai-save-explanation');
-          bar.innerHTML = `<span style="font-size:12px;color:var(--text3)">已有解析，选择：</span>
-            <span id="ai-save-overwrite" style="color:var(--danger);cursor:pointer;margin:0 8px;font-size:13px">覆盖</span>
-            <span id="ai-save-append" style="color:var(--accent);cursor:pointer;font-size:13px">追加</span>
-            <span id="ai-save-cancel" style="color:var(--text3);cursor:pointer;margin-left:8px;font-size:13px">取消</span>`;
-          bar.querySelector('#ai-save-overwrite').onclick = async () => {
-            await saveExplanation(q, text); bar.innerHTML = `📝 将AI回复保存为题目解析`;
-          };
-          bar.querySelector('#ai-save-append').onclick = async () => {
-            await saveExplanation(q, q.explanation + '\n\n【AI补充】\n' + text); bar.innerHTML = `📝 将AI回复保存为题目解析`;
-          };
-          bar.querySelector('#ai-save-cancel').onclick = () => { bar.innerHTML = `📝 将AI回复保存为题目解析`; };
+      const btn = saveBar.querySelector('#ai-save-explanation');
+      btn.onclick = () => {
+        if (aiMsgs.length === 1) {
+          // 只有一条，直接确认
+          doSaveFlow(aiMsgs[0].content);
         } else {
-          await saveExplanation(q, text);
+          // 多条对话，弹选择器
+          const pickerOv = document.createElement('div');
+          pickerOv.className = 'modal-overlay center';
+          pickerOv.innerHTML = `
+            <div class="modal-dialog" style="max-width:340px;max-height:70vh;display:flex;flex-direction:column">
+              <div class="modal-title" style="margin-bottom:8px">选择要保存的 AI 回复</div>
+              <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+                ${aiMsgs.map((m,i) => `
+                  <div data-idx="${i}" style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;color:var(--text);line-height:1.5;transition:background .12s;background:var(--surface2)">
+                    <div style="font-size:10px;font-weight:600;color:var(--accent);margin-bottom:4px">第 ${i+1} 次回复</div>
+                    <div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${Utils.esc(m.content.slice(0,120))}${m.content.length>120?'…':''}</div>
+                  </div>`).join('')}
+              </div>
+              <button class="btn btn-outline btn-block" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
+            </div>`;
+          pickerOv.onclick = e => { if (e.target === pickerOv) Utils.closeModal(pickerOv); };
+          document.body.appendChild(pickerOv);
+          pickerOv.querySelectorAll('[data-idx]').forEach(card => {
+            card.addEventListener('click', () => {
+              Utils.closeModal(pickerOv);
+              doSaveFlow(aiMsgs[+card.dataset.idx].content);
+            });
+          });
         }
       };
+    }
+
+    async function doSaveFlow(text) {
+      if (q.explanation && q.explanation.trim()) {
+        const choiceOv = document.createElement('div');
+        choiceOv.className = 'modal-overlay center';
+        choiceOv.innerHTML = `
+          <div class="modal-dialog" style="max-width:300px">
+            <div class="modal-title" style="margin-bottom:8px">已有解析</div>
+            <div style="font-size:13px;color:var(--text2);margin-bottom:16px">是否覆盖现有解析，还是追加到末尾？</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline flex-1" id="cs-cancel">取消</button>
+              <button class="btn btn-outline flex-1" id="cs-append" style="color:var(--accent);border-color:var(--accent)">追加</button>
+              <button class="btn btn-primary flex-1" id="cs-overwrite">覆盖</button>
+            </div>
+          </div>`;
+        choiceOv.querySelector('#cs-cancel').onclick   = () => Utils.closeModal(choiceOv);
+        choiceOv.querySelector('#cs-overwrite').onclick = async () => { Utils.closeModal(choiceOv); await saveExplanation(q, text); };
+        choiceOv.querySelector('#cs-append').onclick    = async () => { Utils.closeModal(choiceOv); await saveExplanation(q, q.explanation + '\n\n【AI补充】\n' + text); };
+        choiceOv.onclick = e => { if (e.target === choiceOv) Utils.closeModal(choiceOv); };
+        document.body.appendChild(choiceOv);
+      } else {
+        await saveExplanation(q, text);
+      }
     }
 
     async function saveExplanation(q, text) {
@@ -1732,7 +1935,18 @@ const AI = {
       freshQ.explanation = text;
       q.explanation = text;
       await DB.saveQuestion(freshQ);
+      // 立即更新页面上可见的解析区域
+      document.querySelectorAll('.explanation-text.rendered-content').forEach(el => {
+        el.innerHTML = AI.renderFull(text);
+      });
+      document.querySelectorAll('.explanation-box').forEach(box => {
+        box.style.display = '';
+        const rc = box.querySelector('.explanation-text');
+        if (rc) rc.innerHTML = AI.renderFull(text);
+      });
       Utils.toast('✅ 已保存为题目解析');
+      // 触发当前题页刷新（如果有 renderQ 函数则调用）
+      if (typeof window._currentRenderQ === 'function') window._currentRenderQ();
     }
 
     if (isResume) {
@@ -1749,8 +1963,7 @@ const AI = {
   }
 };
 
-// 页面加载时注入已缓存的渲染库
-(async () => { try { await AI.injectLibs(); } catch(e) {} })();
+// 渲染库在 main() 里统一处理
 
 const Nav = {
   // 推入新页面（push-back 与 slide-in 同步进行）
@@ -1791,10 +2004,29 @@ const Nav = {
     State.batchMode = false;
     State.batchSelected.clear();
   },
+  // 原生层调用：判断是否可以返回
+  canPop() {
+    // 有开着的弹窗也算"可返回"（优先关弹窗）
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay'))
+      .filter(m => m.isConnected && !m.classList.contains('closing'));
+    if (openModals.length > 0) return true;
+    const app = document.getElementById('app');
+    return app ? app.querySelectorAll('.page').length > 1 : false;
+  },
   // 弹出当前页面（返回上层）
   pop() {
+    // 有弹窗先关弹窗
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay'))
+      .filter(m => m.isConnected && !m.classList.contains('closing'));
+    if (openModals.length > 0) {
+      Utils.closeModal(openModals[openModals.length - 1]);
+      return;
+    }
     const app = document.getElementById('app');
     const pages = app.querySelectorAll('.page');
+    // 做题页触发退出确认
+    const top = pages[pages.length - 1];
+    if (top && top._isQuizPage) { top._quit(); return; }
     if (pages.length <= 1) return;
     State.pageStack.pop();
     const topEl = pages[pages.length - 1];
@@ -1909,7 +2141,6 @@ const Pages = {
         <span class="appbar-title">${Utils.esc(title)}</span>
         <div class="appbar-actions">
           ${extraButtons}
-          <button class="appbar-btn" onclick="Nav.push('settings',{})" title="设置"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           <button class="appbar-btn" onclick="Actions.importJSON()" title="导入">${Icons.import}</button>
           <button class="appbar-btn" onclick="Actions.exportJSON()" title="导出">${Icons.export}</button>
           <button class="appbar-btn" id="theme-btn" onclick="Actions.toggleTheme()" title="切换主题">
@@ -1959,6 +2190,7 @@ const Pages = {
       case 'stats':     return Pages.renderStats(params);
       case 'settings':    return Pages.renderSettings(params);
       case 'aiSettings':  return Pages.renderAiSettings(params);
+      case 'checker':     return Pages.renderChecker(params);
       case 'srsAnalysis': return Pages.renderSrsAnalysis(params);
       case 'search':    return Pages.renderSearch(params);
       case 'quiz':      return Pages.renderQuiz(params);
@@ -2057,14 +2289,14 @@ const Pages = {
     const el = Pages.createPage('题库管理');
     const content = document.createElement('div');
     content.className = 'page-content';
-    content.style.paddingBottom = 'calc(80px + env(safe-area-inset-bottom))';
+    content.style.paddingBottom = '80px';
     el.appendChild(content);
 
     // FAB 添加文件夹
     const fab = document.createElement('button');
     fab.className = 'fab';
     fab.innerHTML = Icons.plus;
-    fab.style.bottom = 'calc(24px + env(safe-area-inset-bottom))';
+    fab.style.bottom = '24px';
     fab.onclick = () => Actions.createFolder();
     el.appendChild(fab);
 
@@ -2163,14 +2395,14 @@ const Pages = {
     // 内容
     const content = document.createElement('div');
     content.className = 'page-content';
-    content.style.paddingBottom = 'calc(80px + env(safe-area-inset-bottom))';
+    content.style.paddingBottom = '80px';
     el.appendChild(content);
 
     // FAB 添加题目
     const fab = document.createElement('button');
     fab.className = 'fab';
     fab.innerHTML = Icons.plus;
-    fab.style.bottom = 'calc(24px + env(safe-area-inset-bottom))';
+    fab.style.bottom = '24px';
     fab.style.zIndex = '100';
     fab.onclick = () => Nav.push('editQ', { folderId, qId: null });
     el.appendChild(fab);
@@ -2409,7 +2641,7 @@ const Pages = {
                   <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" data-opt-row="${i}">
                     <span style="width:22px;font-size:14px;color:var(--text3);font-weight:600;flex-shrink:0">${String.fromCharCode(65+i)}</span>
                     <input class="form-input" style="flex:1" placeholder="选项${String.fromCharCode(65+i)}" value="${Utils.esc(o)}" data-opt="${i}">
-                    <button data-del-opt="${i}" style="color:var(--danger);padding:4px;flex-shrink:0;${opts.length<=2?'opacity:0.3;pointer-events:none':''}">${Icons.close}</button>
+                    <button data-del-opt="${i}" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);flex-shrink:0;display:flex;align-items:center;justify-content:center;${opts.length<=2?'opacity:0.3;pointer-events:none':''}">${Icons.close}</button>
                   </div>`).join('')}
               </div>
               <button id="add-opt-btn" style="color:var(--accent);font-size:14px;padding:4px 0${opts.length>=26?' ;opacity:0.3;pointer-events:none':''}">+ 添加选项</button>
@@ -2442,6 +2674,25 @@ const Pages = {
               <label class="form-label">正确答案 <span style="color:var(--text3);font-weight:400;font-size:12px">（可添加多个，任意匹配即算对）</span></label>
               <div id="fill-answers-list"></div>
               <button id="add-fill-ans-btn" style="color:var(--accent);font-size:14px;padding:4px 0;margin-top:4px">+ 添加备选答案</button>
+            </div>
+            <div class="form-group">
+              <label class="form-label">判题方式</label>
+              <div style="display:flex;gap:8px">
+                <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="fill-mode-fuzzy-row">
+                  <input type="radio" name="fill-mode" value="fuzzy" ${(q?.fillMode||'fuzzy')==='fuzzy'?'checked':''} style="accent-color:var(--accent)">
+                  <div>
+                    <div style="font-size:13px;font-weight:500;color:var(--text)">关键词匹配</div>
+                    <div style="font-size:11px;color:var(--text3)">允许标点/顺序差异</div>
+                  </div>
+                </label>
+                <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="fill-mode-exact-row">
+                  <input type="radio" name="fill-mode" value="exact" ${q?.fillMode==='exact'?'checked':''} style="accent-color:var(--accent)">
+                  <div>
+                    <div style="font-size:13px;font-weight:500;color:var(--text)">精准匹配</div>
+                    <div style="font-size:11px;color:var(--text3)">必须完全一致</div>
+                  </div>
+                </label>
+              </div>
             </div>
           `}
 
@@ -2608,11 +2859,13 @@ const Pages = {
         // 填空题：读取多答案
         const fillAnswers = [...content.querySelectorAll('[data-fill-ans]')].map(i => i.value.trim()).filter(Boolean);
         if (!fillAnswers.length) { Utils.toast('请输入答案'); return; }
+        const fillModeEl = content.querySelector('input[name="fill-mode"]:checked');
+        const fillMode = fillModeEl ? fillModeEl.value : 'fuzzy';
         const fillData = {
           ...(q || { wrongCount: 0, rightCount: 0, weight: 1, starred: false }),
           folderId, type: qType, question,
           options: undefined, answer: fillAnswers[0], answers: fillAnswers,
-          explanation, updatedAt: Date.now(),
+          fillMode, explanation, updatedAt: Date.now(),
         };
         if (qId) fillData.id = qId;
         await DB.saveQuestion(fillData);
@@ -2648,7 +2901,7 @@ const Pages = {
     const el = Pages.createPage('错题练习');
     const content = document.createElement('div');
     content.className = 'page-content';
-    content.style.paddingBottom = 'calc(80px + env(safe-area-inset-bottom))';
+    content.style.paddingBottom = '80px';
     el.appendChild(content);
 
     async function refresh() {
@@ -2715,7 +2968,13 @@ const Pages = {
           })()}
         </div>
         <div class="card">
-          <div class="card-header"><span class="card-title">选择范围</span></div>
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+            <span class="card-title">选择范围</span>
+            <span style="font-size:13px;color:var(--accent);display:flex;gap:12px">
+              <span style="cursor:pointer" onclick="document.querySelectorAll('[id^=fcb-]').forEach(cb=>{cb.classList.add('checked');window.reviewSelected.add(+cb.id.replace('fcb-',''))})">全选</span>
+              <span style="cursor:pointer" onclick="document.querySelectorAll('[id^=fcb-]').forEach(cb=>{cb.classList.remove('checked');window.reviewSelected.delete(+cb.id.replace('fcb-',''))})">全不选</span>
+            </span>
+          </div>
           <div id="folder-select-list">
             ${folders.map((f, i) => {
               const qs = allQs.filter(q => q.folderId === f.id);
@@ -2727,7 +2986,7 @@ const Pages = {
                     <div class="card-row-title">${Utils.esc(f.name)}</div>
                     <div class="card-row-sub">${qs.length} 题</div>
                   </div>
-                  <div class="checkbox-wrap" id="fcb-${f.id}"></div>
+                  <div class="checkbox-wrap checked" id="fcb-${f.id}"></div>
                 </div>`;
             }).join('')}
           </div>
@@ -2735,48 +2994,213 @@ const Pages = {
         <div class="card" style="padding:16px">
           <div class="form-group">
             <label class="form-label">每次题数</label>
-            <input class="form-input" type="number" id="review-count" value="20" min="1" max="9999">
+            <input class="form-input" type="number" id="review-count" value="${await DB.getMeta('lastReviewCount') || 20}" min="1" max="9999">
           </div>
           <div class="form-group">
             <label class="form-label">抽题模式</label>
             <div style="display:flex;flex-direction:column;gap:8px">
               <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius3);cursor:pointer" id="mode-weighted-row">
-                <input type="radio" name="sample-mode" value="srs" checked style="margin-top:2px;accent-color:var(--accent)">
+                <input type="radio" name="sample-mode" value="srs" ${(await DB.getMeta('lastSampleMode')||'srs')==='srs'?'checked':''} style="margin-top:2px;accent-color:var(--accent)">
                 <div>
                   <div style="font-size:14px;font-weight:500;color:var(--text)">SRS（间隔重复）</div>
                   <div style="font-size:12px;color:var(--text3);margin-top:2px">答错多的题优先出现，已学会的题少出现</div>
                 </div>
               </label>
               <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius3);cursor:pointer" id="mode-unseen-row">
-                <input type="radio" name="sample-mode" value="unseen" style="margin-top:2px;accent-color:var(--accent)">
+                <input type="radio" name="sample-mode" value="unseen" ${(await DB.getMeta('lastSampleMode')||'srs')==='unseen'?'checked':''} style="margin-top:2px;accent-color:var(--accent)">
                 <div>
                   <div style="font-size:14px;font-weight:500;color:var(--text)">新题优先</div>
                   <div style="font-size:12px;color:var(--text3);margin-top:2px">未做过的题优先出现，保证覆盖所有题目</div>
                 </div>
               </label>
+              <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius3);cursor:pointer" id="mode-custom-row">
+                <input type="radio" name="sample-mode" value="custom" ${(await DB.getMeta('lastSampleMode')||'srs')==='custom'?'checked':''} style="margin-top:2px;accent-color:var(--accent)">
+                <div>
+                  <div style="font-size:14px;font-weight:500;color:var(--text)">自定义题型</div>
+                  <div style="font-size:12px;color:var(--text3);margin-top:2px">按题型指定数量，随机抽取</div>
+                </div>
+              </label>
             </div>
           </div>
-          <button class="btn btn-primary btn-block" onclick="startReview()">开始学习</button>
+          <!-- 自定义题型配置（仅在选择"自定义题型"时显示） -->
+          <div id="custom-type-config" style="display:none;margin-top:-4px">
+            <div id="type-rows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+            <button onclick="window.addTypeRow&&window.addTypeRow()" style="width:100%;padding:10px;border:1.5px dashed var(--border);border-radius:10px;background:transparent;color:var(--accent);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              添加题型
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 6px">
+            <div>
+              <div style="font-size:14px;font-weight:500;color:var(--text)">困难模式</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">单选题变填空，需精准输入选项内容</div>
+            </div>
+            <div id="hard-mode-toggle" data-on="0" onclick="(function(t){const on=t.dataset.on!=='1';t.dataset.on=on?'1':'0';t.style.background=on?'var(--danger)':'var(--border)';t.querySelector('div').style.left=on?'21px':'3px'})(this)" style="width:44px;height:26px;border-radius:13px;background:var(--border);position:relative;transition:background 0.2s;flex-shrink:0;cursor:pointer">
+              <div style="width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left 0.2s;pointer-events:none"></div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" style="margin-top:4px" onclick="startReview()">开始学习</button>
         </div>
       `;
 
-      const selected = new Set();
+      window.reviewSelected = new Set();
+      // 默认全选
+      folders.forEach(f => window.reviewSelected.add(f.id));
       window.toggleFolder = (id, row) => {
         const cb = document.getElementById(`fcb-${id}`);
-        if (selected.has(id)) { selected.delete(id); cb.classList.remove('checked'); }
-        else { selected.add(id); cb.classList.add('checked'); }
+        if (window.reviewSelected.has(id)) { window.reviewSelected.delete(id); cb.classList.remove('checked'); }
+        else { window.reviewSelected.add(id); cb.classList.add('checked'); }
       };
+      // 显示/隐藏自定义题型配置，自定义模式时隐藏"每次题数"
+      content.querySelectorAll('input[name="sample-mode"]').forEach(r => {
+        r.addEventListener('change', () => {
+          const cfg = content.querySelector('#custom-type-config');
+          const countGroup = content.querySelector('#review-count')?.closest('.form-group');
+          if (!cfg) return;
+          const isCustom = r.value === 'custom';
+          cfg.style.display = isCustom ? 'block' : 'none';
+          if (countGroup) countGroup.style.display = isCustom ? 'none' : '';
+          // 默认加一行
+          if (isCustom && content.querySelectorAll('.type-row').length === 0) window.addTypeRow && window.addTypeRow();
+        });
+      });
+      // [restore block moved below]
+
+      // 获取当前选题池里各题型数量
+      function getPoolCounts() {
+        const pool = (window.reviewSelected && window.reviewSelected.size) ? allQs.filter(q => window.reviewSelected.has(q.folderId)) : allQs;
+        const types = ['单选题','多选题','判断题','填空题'];
+        const counts = {};
+        const typeMap = {'单选题':'单选','多选题':'多选','判断题':'判断','填空题':'填空'};
+        types.forEach(t => counts[t] = pool.filter(q => q.type === t || q.type === typeMap[t]).length);
+        return counts;
+      }
+
+      // 添加一行题型配置
+      // 用 app 内置 bottom-sheet 弹窗替代系统 select
+      function showTypeSheet(currentType, callback) {
+        const counts = getPoolCounts();
+        const types = ['单选题','多选题','判断题','填空题'];
+        const ov = document.createElement('div');
+        ov.className = 'modal-overlay';
+        ov.innerHTML = `
+          <div class="modal-sheet">
+            <div class="modal-handle"></div>
+            <div class="modal-title" style="margin-bottom:12px">选择题型</div>
+            ${types.map(t => `
+              <div class="card-row" data-type="${t}" style="padding:14px 0;cursor:pointer;border-bottom:1px solid var(--border)">
+                <div class="card-row-content">
+                  <div class="card-row-title">${t}</div>
+                  <div class="card-row-sub">共 ${counts[t]} 题</div>
+                </div>
+                ${t === currentType ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+              </div>`).join('')}
+          </div>`;
+        ov.querySelectorAll('[data-type]').forEach(row => {
+          row.onclick = () => { Utils.closeModal(ov); callback(row.dataset.type); };
+        });
+        ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
+        document.body.appendChild(ov);
+        requestAnimationFrame(() => ov.classList.add('active'));
+      }
+
+      window.addTypeRow = function(defaultType, defaultCount) {
+        const counts = getPoolCounts();
+        const initialType = defaultType || '单选题';
+        const container = content.querySelector('#type-rows');
+        const row = document.createElement('div');
+        row.className = 'type-row';
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);border-radius:10px';
+
+        // 题型选择按钮（点击弹内置 sheet）
+        const typeBtn = document.createElement('button');
+        typeBtn.dataset.selectedType = initialType;
+        typeBtn.style.cssText = 'flex:1;text-align:left;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;background:var(--surface2);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0';
+        typeBtn.innerHTML = `<span class="type-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${initialType}</span><span class="type-count" style="font-size:11px;color:var(--text3);flex-shrink:0">${counts[initialType]}题</span>`;
+        typeBtn.onclick = () => {
+          showTypeSheet(typeBtn.dataset.selectedType, chosen => {
+            typeBtn.dataset.selectedType = chosen;
+            typeBtn.querySelector('.type-label').textContent = chosen;
+            typeBtn.querySelector('.type-count').textContent = counts[chosen] + '题';
+          });
+        };
+
+        const minus = document.createElement('button');
+        minus.textContent = '−';
+        minus.style.cssText = 'width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:16px;cursor:pointer;color:var(--text);flex-shrink:0';
+        const numInput = document.createElement('input');
+        numInput.type = 'number'; numInput.value = defaultCount != null ? String(defaultCount) : '10'; numInput.min = '1';
+        numInput.className = 'type-count-input';
+        numInput.style.cssText = 'width:52px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:4px;font-size:14px;background:var(--surface2);color:var(--text);flex-shrink:0';
+        const plus = document.createElement('button');
+        plus.textContent = '+';
+        plus.style.cssText = 'width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:16px;cursor:pointer;color:var(--text);flex-shrink:0';
+        const del = document.createElement('button');
+        del.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        del.style.cssText = 'width:28px;height:28px;border-radius:8px;border:none;background:transparent;cursor:pointer;color:var(--danger);flex-shrink:0;display:flex;align-items:center;justify-content:center';
+
+        minus.onclick = () => { numInput.value = Math.max(1, (parseInt(numInput.value)||1) - 1); };
+        plus.onclick  = () => { numInput.value = (parseInt(numInput.value)||0) + 1; };
+        del.onclick   = () => row.remove();
+
+        row.appendChild(typeBtn); row.appendChild(minus); row.appendChild(numInput);
+        row.appendChild(plus);    row.appendChild(del);
+        container.appendChild(row);
+      };
+
       window.startReview = async () => {
-        let pool = selected.size
-          ? allQs.filter(q => selected.has(q.folderId))
+        let pool = window.reviewSelected.size
+          ? allQs.filter(q => window.reviewSelected.has(q.folderId))
           : allQs;
         if (!pool.length) { Utils.toast('所选范围无题目'); return; }
-        const count = Math.min(parseInt(content.querySelector('#review-count').value)||20, pool.length);
         const modeEl = content.querySelector('input[name="sample-mode"]:checked');
         const sampleMode = modeEl ? modeEl.value : 'srs';
-        const questions = Utils.weightedSample(pool, count, sampleMode);
-        Nav.push('quiz', { questions, startIdx: 0, mode: 'review' });
+        await DB.setMeta('lastSampleMode', sampleMode);
+        let questions;
+        if (sampleMode === 'custom') {
+          const rows = content.querySelectorAll('.type-row');
+          if (!rows.length) { Utils.toast('请先添加题型'); return; }
+          let combined = [];
+          const customCfg = [];
+          rows.forEach(row => {
+            const type = row.querySelector('[data-selected-type]').dataset.selectedType;
+            const n = Math.max(0, parseInt(row.querySelector('.type-count-input').value) || 0);
+            customCfg.push({ type, n });
+            if (n > 0) {
+              const tKey = {'单选题':'单选','多选题':'多选','判断题':'判断','填空题':'填空'};
+              const typePool = pool.filter(q => q.type === type || q.type === tKey[type]);
+              const picked = [...typePool].sort(() => Math.random()-0.5).slice(0, Math.min(n, typePool.length));
+              combined.push(...picked);
+            }
+          });
+          await DB.setMeta('lastCustomTypes', JSON.stringify(customCfg));
+          if (!combined.length) { Utils.toast('未能抽到题目，请检查数量设置'); return; }
+          questions = combined.sort(() => Math.random()-0.5);
+        } else {
+          const count = Math.min(parseInt(content.querySelector('#review-count').value)||20, pool.length);
+          await DB.setMeta('lastReviewCount', count);
+          questions = Utils.weightedSample(pool, count, sampleMode);
+        }
+        const hardMode = document.getElementById('hard-mode-toggle')?.dataset.on === '1';
+        Nav.push('quiz', { questions, startIdx: 0, mode: 'review', hardMode });
       };
+
+      // 恢复上次自定义题型配置（必须在 addTypeRow/startReview 定义之后）
+      (async () => {
+        const lastMode = await DB.getMeta('lastSampleMode') || 'srs';
+        if (lastMode === 'custom') {
+          const cfg = content.querySelector('#custom-type-config');
+          const countGroup = content.querySelector('#review-count')?.closest('.form-group');
+          if (cfg) cfg.style.display = 'block';
+          if (countGroup) countGroup.style.display = 'none';
+          try {
+            const saved = JSON.parse(await DB.getMeta('lastCustomTypes') || '[]');
+            if (saved.length) {
+              saved.forEach(({ type, n }) => window.addTypeRow(type, n));
+            } else { window.addTypeRow(); }
+          } catch(e) { window.addTypeRow(); }
+        }
+      })();
     }
     load();
     return el;
@@ -2797,7 +3221,13 @@ const Pages = {
       content.innerHTML = `
         <div class="card" style="padding:16px">
           <div class="form-group">
-            <label class="form-label">选择文件夹（不选则全部）</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label class="form-label" style="margin:0">选择文件夹</label>
+              <span style="font-size:13px;color:var(--accent);display:flex;gap:12px">
+                <span style="cursor:pointer" onclick="document.querySelectorAll('[id^=efcb-]').forEach(cb=>{cb.classList.add('checked');window.examSelected.add(+cb.id.replace('efcb-',''))})">全选</span>
+                <span style="cursor:pointer" onclick="document.querySelectorAll('[id^=efcb-]').forEach(cb=>{cb.classList.remove('checked');window.examSelected.delete(+cb.id.replace('efcb-',''))})">全不选</span>
+              </span>
+            </div>
             <div id="exam-folder-list">
               ${folders.map((f, i) => {
                 const qs = allQs.filter(q => q.folderId === f.id);
@@ -2809,33 +3239,37 @@ const Pages = {
                       <div class="card-row-title">${Utils.esc(f.name)}</div>
                       <div class="card-row-sub">${qs.length} 题</div>
                     </div>
-                    <div class="checkbox-wrap" id="efcb-${f.id}"></div>
+                    <div class="checkbox-wrap checked" id="efcb-${f.id}"></div>
                   </div>`;
               }).join('')}
             </div>
           </div>
           <div class="form-group">
             <label class="form-label">题目数量</label>
-            <input class="form-input" type="number" id="exam-count" value="20" min="1" max="200">
+            <input class="form-input" type="number" id="exam-count" value="${await DB.getMeta('lastExamCount') || 20}" min="1" max="200">
           </div>
           <div class="form-group">
             <label class="form-label">考试时长（分钟，0表示不限时）</label>
-            <input class="form-input" type="number" id="exam-time" value="30" min="0" max="180">
+            <input class="form-input" type="number" id="exam-time" value="${await DB.getMeta('lastExamTime') ?? 30}" min="0" max="180">
           </div>
           <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="startExam()">开始考试</button>
         </div>
       `;
-      const selected = new Set();
+      window.examSelected = new Set();
+      // 默认全选
+      folders.forEach(f => window.examSelected.add(f.id));
       window.toggleExamFolder = (id, row) => {
         const cb = document.getElementById(`efcb-${id}`);
-        if (selected.has(id)) { selected.delete(id); cb.classList.remove('checked'); }
-        else { selected.add(id); cb.classList.add('checked'); }
+        if (window.examSelected.has(id)) { window.examSelected.delete(id); cb.classList.remove('checked'); }
+        else { window.examSelected.add(id); cb.classList.add('checked'); }
       };
       window.startExam = async () => {
-        let pool = selected.size ? allQs.filter(q => selected.has(q.folderId)) : allQs;
+        let pool = window.examSelected.size ? allQs.filter(q => window.examSelected.has(q.folderId)) : allQs;
         if (!pool.length) { Utils.toast('所选范围无题目'); return; }
         const count = Math.min(parseInt(content.querySelector('#exam-count').value)||20, pool.length);
         const timeLimit = parseInt(content.querySelector('#exam-time').value)||0;
+        await DB.setMeta('lastExamCount', count);
+        await DB.setMeta('lastExamTime', timeLimit);
         // 随机抽题（不按权重）
         const questions = pool.sort(() => Math.random()-0.5).slice(0, count);
         Nav.push('quiz', { questions, startIdx: 0, mode: 'exam', timeLimit });
@@ -2852,7 +3286,7 @@ const Pages = {
     const el = Pages.createPage('收藏夹');
     const content = document.createElement('div');
     content.className = 'page-content';
-    content.style.paddingBottom = 'calc(80px + env(safe-area-inset-bottom))';
+    content.style.paddingBottom = '80px';
     el.appendChild(content);
 
     async function refresh() {
@@ -2930,9 +3364,10 @@ const Pages = {
       // 各文件夹统计
       const folderStats = await Promise.all(folders.map(async f => {
         const fqs = qs.filter(q => q.folderId === f.id);
-        const correct = fqs.filter(q => (q.rightCount||0) > 0 && (q.wrongCount||0) === 0).length;
-        const wrong   = fqs.filter(q => (q.wrongCount||0) > 0).length;
-        return { name: f.name, total: fqs.length, correct, wrong };
+        const correct = fqs.filter(q => q.srsNextReview && (q.srsLevel||0) >= 2).length;
+        const wrong   = fqs.filter(q => q.srsNextReview && (q.srsLevel||0) < 2).length;
+        const unseen  = fqs.filter(q => !q.srsNextReview).length;
+        return { name: f.name, total: fqs.length, correct, wrong, unseen };
       }));
 
       content.innerHTML = `
@@ -2975,7 +3410,7 @@ const Pages = {
           ${folderStats.map(f => {
             const correctPct = f.total > 0 ? Math.round(f.correct / f.total * 100) : 0;
             const wrongPct   = f.total > 0 ? Math.round(f.wrong   / f.total * 100) : 0;
-            const unseen = f.total - f.correct - f.wrong;
+            const unseen = f.unseen;
             return `
             <div class="stat-card" style="padding:12px 16px">
               <div class="flex-row" style="margin-bottom:6px">
@@ -3123,7 +3558,7 @@ const Pages = {
     async function load() {
       const qs = await DB.getAllQuestions();
       const mastered = qs
-        .filter(q => (q.rightCount||0) > 0 && (q.wrongCount||0) === 0 && (q.srsLevel||0) >= 2)
+        .filter(q => q.srsNextReview && (q.srsLevel||0) >= 2)
         .sort((a,b) => (b.rightCount||0) - (a.rightCount||0));
       const struggling = qs
         .filter(q => (q.wrongCount||0) > 0 || ((q.srsEase||2.5) < 2.5 && q.srsLastReview))
@@ -3258,14 +3693,16 @@ const Pages = {
   "type": "填空",
   "question": "题目内容",
   "answer": "主答案",
-  "answers": ["备选答案1", "备选答案2"]
+  "answers": ["备选答案1", "备选答案2"],
+  "explanation": "解析内容（可选）"
 }
 
 2. 判断题
 {
   "type": "判断",
   "question": "题目内容",
-  "answer": "正确"
+  "answer": "正确",
+  "explanation": "解析内容（可选）"
 }
 answer 只能是"正确"或"错误"
 
@@ -3274,7 +3711,8 @@ answer 只能是"正确"或"错误"
   "type": "单选",
   "question": "题目内容",
   "options": ["选项1", "选项2", "选项3"],
-  "answer": "A"
+  "answer": "A",
+  "explanation": "解析内容（可选）"
 }
 answer 使用字母 A-Z，第一个选项是 A
 
@@ -3283,17 +3721,27 @@ answer 使用字母 A-Z，第一个选项是 A
   "type": "多选",
   "question": "题目内容",
   "options": ["选项1", "选项2", "选项3"],
-  "answer": "ABC"
+  "answer": "ABC",
+  "explanation": "解析内容（可选）"
 }
 
-四、禁止事项
+四、explanation 解析字段说明
+- 所有题型均可包含 explanation 字段
+- 解析内容支持 Markdown 格式（**加粗**、列表、代码块等）
+- 如果题目或解析包含数学公式，使用 KaTeX 语法：行内公式用 $公式$，独立公式用 $$公式$$
+- 例如：$E=mc^2$，$$\int_0^1 x^2 dx = \frac{1}{3}$$
+
+五、不支持的内容处理
+- 如果遇到本系统不支持的题型（如连线题、排序题、作图题等），跳过不转换
+- 转换完成后，在 JSON 末尾之外单独说明哪些内容因题型不支持或无法自动生成答案而被跳过
+- 不要自行编造答案，如原题无答案则跳过该题并说明
+
+六、禁止事项
 - 不要添加多余字段
 - 不要生成 null 或空数组字段
 - 不要输出 Markdown 代码块
 
-现在开始转换下面的原始题库：
-
-【把你的题目粘贴到这里】`;
+现在开始转换下面的原始题库：`;
 
     const aiBody = `
       <p style="${p}">把任意格式的题目（Word 复制、截图 OCR、手打文字）发给 AI，配上下面的提示词，AI 会自动转成可直接导入的 JSON 文件。</p>
@@ -3303,7 +3751,8 @@ answer 使用字母 A-Z，第一个选项是 A
         2️⃣ 粘贴到 ChatGPT / Kimi / 文心一言 等 AI<br>
         3️⃣ 把你的原始题目接在提示词末尾<br>
         4️⃣ AI 输出 JSON 后保存为 .json 文件<br>
-        5️⃣ 导入刷题宝即可
+        5️⃣ 可先用 <b>设置 → 工具 → 题库体检</b> 检测文件格式是否异常<br>
+        6️⃣ 导入刷题宝即可
       </div>
       <button class="btn btn-primary btn-block" style="margin-top:12px" id="copy-prompt-btn">📋 复制 AI 提示词</button>`;
 
@@ -3365,10 +3814,90 @@ answer 使用字母 A-Z，第一个选项是 A
       </div>`;
 
     content.innerHTML = `
+      <div class="section-title">外观</div>
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-row" style="padding:14px 16px" onclick="Actions.toggleTheme()">
+          <div class="card-row-icon" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          </div>
+          <div class="card-row-content">
+            <div class="card-row-title">深色模式</div>
+            <div class="card-row-sub" id="theme-mode-sub">${State.darkMode ? '已开启' : '已关闭'}</div>
+          </div>
+          <div id="settings-theme-toggle" style="width:44px;height:26px;border-radius:13px;background:${State.darkMode ? 'var(--accent)' : 'var(--border)'};position:relative;transition:background 0.2s;flex-shrink:0">
+            <div style="width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;transition:left 0.2s;left:${State.darkMode ? '21px' : '3px'}"></div>
+          </div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:0 16px"></div>
+        <div class="card-row" style="padding:14px 16px" id="auto-dark-row" onclick="(function(){
+          const cur=document.getElementById('auto-dark-toggle');
+          const on=cur.dataset.on!=='1';
+          cur.dataset.on=on?'1':'0';
+          cur.style.background=on?'var(--accent)':'var(--border)';
+          cur.querySelector('div').style.left=on?'21px':'3px';
+          document.getElementById('auto-dark-time').style.display=on?'block':'none';
+          DB.setMeta('autoDarkEnabled',on);
+        })()">
+          <div class="card-row-icon" style="background:linear-gradient(135deg,#1e293b,#334155)">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </div>
+          <div class="card-row-content">
+            <div class="card-row-title">自动深色模式</div>
+            <div class="card-row-sub">按时间段自动切换</div>
+          </div>
+          <div id="auto-dark-toggle" data-on="0" style="width:44px;height:26px;border-radius:13px;background:var(--border);position:relative;transition:background 0.2s;flex-shrink:0">
+            <div style="width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:3px;transition:left 0.2s;left:3px"></div>
+          </div>
+        </div>
+        <div id="auto-dark-time" style="display:none;padding:12px 16px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2)">
+            <span>深色时间段</span>
+            <input type="time" id="dark-start-input" value="22:00" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;background:var(--surface2);color:var(--text);font-size:13px">
+            <span>至</span>
+            <input type="time" id="dark-end-input" value="07:00" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;background:var(--surface2);color:var(--text);font-size:13px">
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">例：22:00 至 07:00 表示晚上10点到次日早上7点开启深色</div>
+        </div>
+      </div>
+      <div class="section-title">工具</div>
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-row" id="render-libs-row" style="cursor:pointer;padding:14px 16px">
+          <div class="card-row-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div class="card-row-content">
+            <div class="card-row-title">渲染库</div>
+            <div class="card-row-sub" id="lib-status-sub">检测中...</div>
+          </div>
+          <div style="color:var(--text3);font-size:20px">›</div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:0 16px"></div>
+        <div class="card-row" onclick="Nav.push('checker',{})" style="cursor:pointer;padding:14px 16px">
+          <div class="card-row-icon" style="background:linear-gradient(135deg,#0ea5e9,#0284c7)">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+          </div>
+          <div class="card-row-content">
+            <div class="card-row-title">题库体检</div>
+            <div class="card-row-sub">检测重复题、缺失答案、格式异常</div>
+          </div>
+          <div style="color:var(--text3);font-size:20px">›</div>
+        </div>
+      </div>
       <div class="section-title">AI 功能</div>
       <div class="card" style="margin-bottom:10px">
-        <div class="card-row" id="ai-settings-row" style="cursor:pointer;padding:14px 16px">
-          <div class="card-row-icon" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)"><span style="font-size:18px">🤖</span></div>
+        <div class="card-row" onclick="Nav.push('aiSettings',{})" style="cursor:pointer;padding:14px 16px">
+          <div class="card-row-icon" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <path d="M8 10h.01M12 10h.01M16 10h.01"/>
+            </svg>
+          </div>
           <div class="card-row-content">
             <div class="card-row-title">问 AI 功能配置</div>
             <div class="card-row-sub" id="ai-status-sub">加载中...</div>
@@ -3383,6 +3912,8 @@ answer 使用字母 A-Z，第一个选项是 A
       ${section('s4','🔗','链接导入使用教程', urlBody)}
       <div class="section-title" style="margin-top:4px">关于</div>
       <div class="card" style="padding:16px">
+
+        <!-- 标题行 -->
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
           <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#6366f1);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(99,102,241,0.35)">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -3394,10 +3925,114 @@ answer 使用字母 A-Z，第一个选项是 A
           </div>
           <div>
             <div style="font-size:16px;font-weight:700;color:var(--text)">刷题宝</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:2px">v2.4 · AI 解析 & 渲染库支持</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">v2.7</div>
           </div>
         </div>
+
+        <!-- 项目简介 -->
+        <div style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:14px;padding:12px;background:var(--surface2);border-radius:10px">
+          刷题宝是一款刷题工具，支持单选、多选、判断、填空四种题型，内置 SM-2 间隔重复算法让复习更科学高效。题库以 JSON 文件管理，可自由导入导出，配合 AI 一键转换功能，任意格式的题目都能快速入库。
+        </div>
+
         <div class="divider"></div>
+
+        <!-- 更新日志 -->
+        <div onclick="(function(el){el.style.display=el.style.display==='none'?'block':'none'})(document.getElementById('changelog-body'))"
+             style="display:flex;align-items:center;gap:8px;padding:10px 0;cursor:pointer;user-select:none">
+          <span style="font-size:16px">📋</span>
+          <span style="flex:1;font-size:14px;font-weight:600;color:var(--text)">更新日志</span>
+          <span style="color:var(--text3);font-size:18px">›</span>
+        </div>
+        <div id="changelog-body" style="display:none;font-size:12px;color:var(--text2);line-height:2;padding-bottom:6px">
+
+          <div style="font-weight:700;color:var(--accent);margin:6px 0 3px">v2.7</div>
+          <div style="padding-left:4px">
+            • 设置页深浅色开关，支持按时间段自动切换<br>
+            • 学习/考试模式记忆上次题数、模式及自定义题型<br>
+            • 文件夹选择默认全选，增加一键全选/全不选<br>
+            • 学习模式底部按钮布局优化<br>
+            • 填空题支持精准/关键词两种判题方式<br>
+            • 学习模式新增困难模式，单选题变填空精准匹配
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.6</div>
+          <div style="padding-left:4px">
+            • 搜题在系统浏览器打开，不再卡死无法返回<br>
+            • 页面底部为系统导航栏预留空间<br>
+            • 考试页面弹出键盘时页面自动上移<br>
+            • 重置统计同时清零使用时长与全部 SRS 进度<br>
+            • 导入含学习记录的文件时先询问替换还是跳过<br>
+            • 状态栏颜色随主题动态切换，启动遮罩渐隐无闪屏
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.5</div>
+          <div style="padding-left:4px">
+            • AI 回复一键保存为解析，多条回复可选<br>
+            • 笔记弹窗默认只读，点编辑才唤起键盘<br>
+            • AI 转换提示词加入解析字段与公式语法说明<br>
+            • 题目选项支持 KaTeX 数学公式渲染<br>
+            • Android 沉浸式状态栏与主题联动<br>
+            • 导出通过系统分享面板发送，支持"打开方式"导入
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.4</div>
+          <div style="padding-left:4px">
+            • 问 AI：流式输出、Markdown / LaTeX / 代码高亮<br>
+            • 渲染库按需下载，永久离线缓存<br>
+            • 导出可选文件夹、笔记、SRS 进度、学习统计<br>
+            • 导入自动去重，学习数据可合并<br>
+            • 题库体检：检测重复、缺答案、格式异常
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.3</div>
+          <div style="padding-left:4px">
+            • SRS 分析页：遗忘曲线、到期分布、文件夹分布<br>
+            • 考试模式随机乱序选项<br>
+            • 平均答题时长统计 · 上次复习时间显示
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.2</div>
+          <div style="padding-left:4px">
+            • SM-2 间隔重复算法（SRS）上线<br>
+            • 题目笔记 · 学习计时器 · 使用时长统计<br>
+            • 设置页教程：JSON 格式、AI 转换、SRS 说明
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.1</div>
+          <div style="padding-left:4px">
+            • URL 链接直接导入题库<br>
+            • 全局搜索（题目 / 选项 / 解析）<br>
+            • 主题切换过渡动画 · 批量操作
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v2.0</div>
+          <div style="padding-left:4px">
+            • 多文件夹管理 · 考试模式 · 错题本 · 收藏夹<br>
+            • 积分系统 · 答题统计 · 深色模式
+          </div>
+
+          <div style="font-weight:700;color:var(--text);margin:10px 0 3px">v1.0</div>
+          <div style="padding-left:4px">
+            • 单选、多选、判断、填空四种题型<br>
+            • JSON 文件导入导出 · 基础答题与错题复习
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 检测更新 -->
+        <div class="card-row" onclick="Actions.checkUpdate()" style="cursor:pointer;padding:12px 0">
+          <div style="font-size:18px;margin-right:10px">🔄</div>
+          <div class="card-row-content">
+            <div class="card-row-title">检测更新</div>
+            <div class="card-row-sub app-version-display" id="update-check-sub">${window._appVersion ? "当前版本 "+window._appVersion : "—"}</div>
+          </div>
+          <div style="color:var(--text3);font-size:20px">›</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 联系方式 -->
         <div class="card-row" onclick="Actions.showContact()" style="cursor:pointer;padding:12px 0">
           <div style="font-size:18px;margin-right:10px">✉️</div>
           <div class="card-row-content">
@@ -3407,13 +4042,34 @@ answer 使用字母 A-Z，第一个选项是 A
           <div style="color:var(--text3);font-size:20px">›</div>
         </div>
         <div style="padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);text-align:center;line-height:1.8">
-          本网页由临沂市机电工程学校 23 级电气学生设计
+          本软件由临沂市机电工程学校 23 级电气学生设计
         </div>
       </div>
       <div style="height:20px"></div>
     `;
 
     // Copy prompt button
+    // 保存自动深色时间段，并异步恢复真实保存值
+    const dsInput = content.querySelector('#dark-start-input');
+    const deInput = content.querySelector('#dark-end-input');
+    if (dsInput) dsInput.addEventListener('change', () => DB.setMeta('autoDarkStart', dsInput.value));
+    if (deInput) deInput.addEventListener('change', () => DB.setMeta('autoDarkEnd', deInput.value));
+    // 异步加载自动深色设置后更新 UI
+    (async () => {
+      const enabled = await DB.getMeta('autoDarkEnabled') || false;
+      const start   = await DB.getMeta('autoDarkStart') || '22:00';
+      const end     = await DB.getMeta('autoDarkEnd')   || '07:00';
+      const tog = document.getElementById('auto-dark-toggle');
+      const timeSec = document.getElementById('auto-dark-time');
+      if (tog) {
+        tog.dataset.on = enabled ? '1' : '0';
+        tog.style.background = enabled ? 'var(--accent)' : 'var(--border)';
+        tog.querySelector('div').style.left = enabled ? '21px' : '3px';
+      }
+      if (timeSec) timeSec.style.display = enabled ? 'block' : 'none';
+      if (dsInput) dsInput.value = start;
+      if (deInput) deInput.value = end;
+    })();
     content.querySelector('#copy-prompt-btn')?.addEventListener('click', () => {
       if (navigator.clipboard) {
         navigator.clipboard.writeText(promptFull).then(() => Utils.toast('✅ 提示词已复制，粘贴给 AI 即可'));
@@ -3422,20 +4078,30 @@ answer 使用字母 A-Z，第一个选项是 A
       }
     });
 
-    // AI 设置入口
-    content.querySelector('#ai-settings-row').addEventListener('click', () => Nav.push('aiSettings', {}));
+
 
     // AI 状态摘要
     (async () => {
       const sub = content.querySelector('#ai-status-sub');
       if (!sub) return;
       const cfg = await AI.getConfig();
-      const libs = await AI.getLibStatus();
-      const allReady = libs.every(l => l.ready);
       if (!cfg.on) sub.textContent = '未开启';
       else if (!cfg.url || !cfg.key || !cfg.model) sub.textContent = 'API 未配置';
-      else if (!allReady) sub.textContent = `已配置 · 渲染库未就绪`;
       else sub.textContent = `已就绪 · ${cfg.model.split('/').pop()}`;
+    })();
+
+    // 渲染库状态 + 点击管理
+    (async () => {
+      const sub = content.querySelector('#lib-status-sub');
+      const row = content.querySelector('#render-libs-row');
+      if (!sub || !row) return;
+      const libs = await AI.getLibStatus();
+      const allReady = libs.every(l => l.ready);
+      const readyCount = libs.filter(l => l.ready).length;
+      sub.textContent = allReady ? `✅ 已就绪（${readyCount}/${libs.length}）` : `⬜ 未完全加载（${readyCount}/${libs.length}）`;
+      sub.style.color = allReady ? 'var(--success)' : 'var(--warn)';
+
+      row.onclick = () => Actions._showRenderLibsManager();
     })();
 
     return el;
@@ -3525,7 +4191,14 @@ answer 使用字母 A-Z，第一个选项是 A
      支持：practice / review / wrong / exam
      ===================================================== */
   renderQuiz(params) {
-    const { questions, startIdx = 0, mode = 'practice', timeLimit = 0 } = params;
+    const { questions: _rawQuestions, startIdx = 0, mode = 'practice', timeLimit = 0, hardMode = false } = params;
+    // 困难模式：单选题展示为填空（不改原始数据，只在渲染时转换）
+    const questions = hardMode ? _rawQuestions.map(q => {
+      if (q.type !== '单选') return q;
+      const ansIdx = (q.answer || 'A').charCodeAt(0) - 65;
+      const ansText = q.options && q.options[ansIdx] != null ? q.options[ansIdx] : q.answer;
+      return { ...q, _hardMode: true, type: '填空', answer: ansText, answers: [ansText], fillMode: 'exact', options: undefined };
+    }) : _rawQuestions;
     const el = document.createElement('div');
     el.className = 'page';
     el.style.display = 'flex';
@@ -3634,7 +4307,7 @@ answer 使用字母 A-Z，第一个选项是 A
             } else if (letter === displayAnswer) cls = 'selected';
             return `<div class="option-item ${cls}" data-letter="${letter}">
               <div class="option-letter">${letter}</div>
-              <div class="option-text">${Utils.esc(o)}</div>
+              <div class="option-text">${AI.renderFull(o)}</div>
               ${!isExam && answered && letter === correctLetter ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
             </div>`;
           }).join('')}
@@ -3668,7 +4341,7 @@ answer 使用字母 A-Z，第一个选项是 A
             } else if (userChose) cls = 'selected';
             return `<div class="option-item ${cls}" data-letter="${letter}" style="position:relative">
               <div class="option-letter">${letter}</div>
-              <div class="option-text">${Utils.esc(o)}</div>
+              <div class="option-text">${AI.renderFull(o)}</div>
               ${answered && isCorrectOpt ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
             </div>`;
           }).join('')}
@@ -3712,7 +4385,7 @@ answer 使用字母 A-Z，第一个选项是 A
               <div style="font-size:13px;color:var(--success);font-weight:600;margin-bottom:6px">正确答案</div>
               ${allAnswers.map((a, i) => `
                 <div style="font-size:15px;color:var(--text);${i>0?'margin-top:4px;padding-top:4px;border-top:1px solid rgba(0,0,0,0.06)':''}">
-                  ${i>0?`备选${i}：`:''}${Utils.esc(a)}
+                  ${i>0?`备选${i}：`:''}${AI.renderFull(a)}
                 </div>`).join('')}
             </div>
           ` : ''}
@@ -3733,7 +4406,7 @@ answer 使用字母 A-Z，第一个选项是 A
             ${showAI ? `<button id="quiz-ai-btn" style="display:flex;align-items:center;gap:3px;font-size:12px;padding:3px 8px;border-radius:12px;border:1px solid #8b5cf6;background:#f5f3ff;color:#7c3aed">🤖&nbsp;问AI</button>` : ''}
           </div>
         </div>
-        <div class="quiz-question">${Utils.esc(q.question)}</div>
+        <div class="quiz-question">${AI.renderFull(q.question)}</div>
         ${qBody}
         ${answered && q.explanation ? `
           <div class="explanation-box">
@@ -3743,7 +4416,12 @@ answer 使用字母 A-Z，第一个选项是 A
       `;
       if (showSearch) {
         body.querySelector('#quiz-search-btn')?.addEventListener('click', () => {
-          window.open('https://www.baidu.com/s?wd=' + encodeURIComponent(q.question), '_blank');
+          const searchUrl = 'https://www.baidu.com/s?wd=' + encodeURIComponent(q.question);
+          if (window.AndroidBridge && window.AndroidBridge.openUrl) {
+            window.AndroidBridge.openUrl(searchUrl);
+          } else {
+            window.open(searchUrl, '_blank');
+          }
         });
         body.querySelector('#quiz-note-btn')?.addEventListener('click', () => {
           Actions._showNoteEditor(q, () => renderQ());
@@ -3812,20 +4490,16 @@ answer 使用字母 A-Z，第一个选项是 A
         `;
       } else {
         footer.innerHTML = `
-          <button class="btn btn-outline" ${isFirst?'disabled':''} onclick="this.closest('.page')._prev()" style="padding:10px 8px;font-size:13px;flex:0 0 auto;${isFirst?'opacity:0.4':''}">上题</button>
+          <button class="btn btn-outline" ${isFirst?'disabled':''} onclick="this.closest('.page')._prev()" style="padding:10px 10px;font-size:13px;flex:0 0 auto;white-space:nowrap;${isFirst?'opacity:0.4':''}">上题</button>
           ${!answered
             ? (q?.type === '填空'
-                ? `<span style="display:flex;gap:6px;flex:1">
-                    <button class="btn btn-outline" onclick="this.closest('.page')._skipQ()" style="color:var(--warn);border-color:var(--warn);flex:0 0 auto;padding:10px 12px">不会做</button>
-                    <button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitFill()">提交</button>
-                  </span>`
+                ? `<button class="btn btn-outline" onclick="this.closest('.page')._skipQ()" style="color:var(--warn);border-color:var(--warn);padding:10px 12px;white-space:nowrap;flex:0 0 auto;margin-left:6px">不会做</button>
+                   <button class="btn btn-primary flex-1" style="margin-left:6px" onclick="this.closest('.page')._submitFill()">提交</button>`
                 : isMulti
-                  ? `<button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitMulti()" ${multiSelected.length===0?'disabled style="opacity:0.4"':''}>提交答案</button>`
-                  : `<span style="display:flex;gap:6px;flex:1">
-                      <button class="btn btn-outline" onclick="this.closest('.page')._skipQ()" style="color:var(--warn);border-color:var(--warn);flex:0 0 auto;padding:10px 12px">不会做</button>
-                      <button class="btn btn-primary flex-1" onclick="this.closest('.page')._submitSingle()" ${!userAnswer?'disabled style="opacity:0.4"':''}>提交</button>
-                    </span>`)
-            : `<button class="btn btn-primary flex-1" onclick="this.closest('.page').${isLast ? '_finish' : '_next'}()">${isLast ? '完成' : '下一题'}</button>`
+                  ? `<button class="btn btn-primary flex-1" style="margin-left:6px" onclick="this.closest('.page')._submitMulti()" ${multiSelected.length===0?'disabled style="opacity:0.4"':''}>提交答案</button>`
+                  : `<button class="btn btn-outline" onclick="this.closest('.page')._skipQ()" style="color:var(--warn);border-color:var(--warn);padding:10px 12px;white-space:nowrap;flex:0 0 auto;margin-left:6px">不会做</button>
+                     <button class="btn btn-primary flex-1" style="margin-left:6px" onclick="this.closest('.page')._submitSingle()" ${!userAnswer?'disabled style="opacity:0.4"':''}>提交</button>`)
+            : `<button class="btn btn-primary flex-1" style="margin-left:6px" onclick="this.closest('.page').${isLast ? '_finish' : '_next'}()">${isLast ? '完成' : '下一题'}</button>`
           }
         `;
       }
@@ -3836,7 +4510,7 @@ answer 使用字母 A-Z，第一个选项是 A
       if (!ua && ua !== 0) return false;
       if (ua === '__skipped__') return false;
       const ans = q.answers && q.answers.length ? q.answers : q.answer;
-      if (q.type === '填空') return Utils.matchFill(ua, ans);
+      if (q.type === '填空') return Utils.matchFill(ua, ans, q.fillMode || 'fuzzy');
       if (q.type === '多选') {
         // ua 是排序后的字母数组，q.answer 是字母字符串如 "ABC"
         const correctLetters = Array.isArray(q.answer)
@@ -4018,7 +4692,7 @@ answer 使用字母 A-Z，第一个选项是 A
             else if (letter === ua && ua !== correctLetter) cls = 'wrong';
             return `<div class="option-item ${cls}" style="pointer-events:none">
               <div class="option-letter">${q.type === '单选' ? letter : (o === '正确' ? '✓' : '✗')}</div>
-              <div class="option-text">${Utils.esc(o)}</div>
+              <div class="option-text">${AI.renderFull(o)}</div>
               ${letter === correctLetter ? `<div style="margin-left:auto;color:var(--success)">${Icons.check}</div>` : ''}
             </div>`;
           }).join('')}
@@ -4033,7 +4707,7 @@ answer 使用字母 A-Z，第一个选项是 A
           </div>
           <div style="background:var(--success-light);border-radius:10px;padding:12px">
             <div style="font-size:13px;color:var(--success);font-weight:600;margin-bottom:4px">正确答案</div>
-            <div style="font-size:15px;color:var(--text)">${Utils.esc(q.answer)}</div>
+            <div style="font-size:15px;color:var(--text)">${AI.renderFull(q.answer)}</div>
           </div>
         `;
       }
@@ -4050,7 +4724,7 @@ answer 使用字母 A-Z，第一个选项是 A
             ${showViewAI ? `<button id="view-ai-btn" style="display:flex;align-items:center;gap:3px;font-size:12px;padding:3px 8px;border-radius:12px;border:1px solid #8b5cf6;background:#f5f3ff;color:#7c3aed">🤖&nbsp;问AI</button>` : ''}
           </div>
         </div>
-        <div class="quiz-question">${Utils.esc(q.question)}</div>
+        <div class="quiz-question">${AI.renderFull(q.question)}</div>
         ${qBody}
         ${q.explanation ? `<div class="explanation-box"><div class="explanation-title">💡 解析</div><div class="explanation-text rendered-content">${AI.renderFull(q.explanation)}</div></div>` : ''}
       `;
@@ -4086,15 +4760,41 @@ answer 使用字母 A-Z，第一个选项是 A
           <div class="modal-title" style="margin-bottom:6px">退出做题？</div>
           <div style="font-size:14px;color:var(--text3);margin-bottom:20px">当前进度将不会保存</div>
           <div style="display:flex;gap:10px">
-            <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">继续做题</button>
+            <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">继续做题</button>
             <button class="btn btn-danger flex-1" id="confirm-quit-btn">确认退出</button>
           </div>
         </div>`;
       overlay.querySelector('#confirm-quit-btn').onclick = () => {
-        overlay.remove();
+        // 直接执行页面移除，不走 Nav.pop()，避免弹窗关闭动画期间再次触发 _quit
         StudyTimer.stop();
         if (examTimer) clearInterval(examTimer);
-        Nav.pop();
+        overlay.remove();
+        // 直接触发页面退出动画
+        const app = document.getElementById('app');
+        const pages = app.querySelectorAll('.page');
+        if (pages.length <= 1) return;
+        State.pageStack.pop();
+        const topEl = pages[pages.length - 1];
+        const belowEl = pages[pages.length - 2];
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            topEl.style.transition = 'transform 0.3s cubic-bezier(0.4,0,0.2,1)';
+            topEl.style.transform = 'translateX(100%)';
+            // 恢复所有下层页面（不只是 belowEl），防止多级页面叠加时首页半透明
+            const allPages = app.querySelectorAll('.page');
+            allPages.forEach((p, i) => {
+              if (p === topEl) return;
+              p.style.transition = 'transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s cubic-bezier(0.4,0,0.2,1)';
+              p.style.transform = i === allPages.length - 2 ? 'translateX(0) scale(1)' : 'translateX(0) scale(1)';
+              p.style.opacity = '1';
+            });
+            setTimeout(() => {
+              topEl.remove();
+              app.querySelectorAll('.page').forEach(p => { p.style.transition = ''; });
+              Nav.refreshHome();
+            }, 320);
+          });
+        });
       };
       document.body.appendChild(overlay);
     };
@@ -4153,6 +4853,8 @@ answer 使用字母 A-Z，第一个选项是 A
       }, 1000);
     }
 
+    // 暴露给外部（AI保存解析后立即刷新当前题）
+    window._currentRenderQ = renderQ;
     renderQ();
     return el;
   },
@@ -4165,9 +4867,6 @@ answer 使用字母 A-Z，第一个选项是 A
 
     async function render() {
       const cfg = await AI.getConfig();
-      const libs = await AI.getLibStatus();
-      const allReady = libs.every(l => l.ready);
-
       content.innerHTML = `
         <div class="section-title">开关</div>
         <div class="card" style="padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px">
@@ -4200,27 +4899,7 @@ answer 使用字母 A-Z，第一个选项是 A
           </div>
         </div>
 
-        <div class="section-title">渲染库支持情况</div>
-        <div class="card" style="padding:16px;margin-bottom:10px">
-          <div id="libs-list">
-            ${libs.map(lib => `
-              <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);last-child:border:none">
-                <div style="flex:1">
-                  <div style="font-size:14px;font-weight:500;color:var(--text)">${lib.name}</div>
-                  <div style="font-size:12px;color:var(--text3)">${lib.desc}</div>
-                </div>
-                <span style="font-size:12px;padding:2px 8px;border-radius:10px;background:${lib.ready?'var(--success-light)':'var(--surface2)'};color:${lib.ready?'var(--success)':'var(--text3)'}">
-                  ${lib.ready ? '✅ 已就绪' : '⬜ 未加载'}
-                </span>
-              </div>`).join('')}
-          </div>
-          <div style="margin-top:12px;display:flex;gap:8px">
-            <button class="btn btn-primary flex-1" id="lib-load-btn">
-              ${allReady ? '🔄 重新加载' : '⬇️ 加载渲染库'}
-            </button>
-          </div>
-          ${allReady ? `<div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.6">渲染库已缓存到本地，无需重复下载。如显示异常可点击重新加载。</div>` : `<div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.6">下载后永久缓存，不影响离线使用。建议在 Wi-Fi 环境下加载。</div>`}
-        </div>`;
+        `;
 
       // 开关
       const toggle = content.querySelector('#ai-toggle');
@@ -4255,55 +4934,320 @@ answer 使用字母 A-Z，第一个选项是 A
         finally { btn.textContent = '🔗 测试连接'; btn.disabled = false; }
       };
 
-      // 加载/重新加载渲染库
-      content.querySelector('#lib-load-btn').onclick = async () => {
-        const allReady2 = (await AI.getLibStatus()).every(l => l.ready);
-        if (allReady2) {
-          // 重新加载确认
-          const ov = document.createElement('div');
-          ov.className = 'modal-overlay center';
-          ov.innerHTML = `<div class="modal-dialog" style="max-width:300px;text-align:center">
-            <div style="font-size:32px;margin-bottom:8px">🔄</div>
-            <div class="modal-title">重新加载渲染库</div>
-            <div style="font-size:13px;color:var(--text3);margin:8px 0 16px;line-height:1.6">仅在渲染出现异常时需要操作，正常情况无需重新加载。</div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
-              <button class="btn btn-primary flex-1" id="confirm-reload-libs">确认重新加载</button>
-            </div>
-          </div>`;
-          ov.onclick = e => { if (e.target === ov) ov.remove(); };
-          document.body.appendChild(ov);
-          ov.querySelector('#confirm-reload-libs').onclick = async () => {
-            ov.remove();
-            await AI.clearLibs();
-            await doLoad();
-          };
-        } else {
-          await doLoad();
-        }
-      };
-
-      async function doLoad() {
-        const btn = content.querySelector('#lib-load-btn');
-        const listEl = content.querySelector('#libs-list');
-        btn.disabled = true;
-        const results = await AI.loadLibs((i, total, name) => {
-          btn.textContent = `⬇️ 下载中 ${i+1}/${total}：${name}`;
-        });
-        btn.disabled = false;
-        const failed = results.filter(r => !r.ok);
-        if (failed.length) {
-          Utils.toast(`⚠️ ${failed.length} 个库下载失败，请检查网络`);
-        } else {
-          Utils.toast('✅ 渲染库加载完成');
-          await AI.injectLibs();
-        }
-        await render(); // 刷新状态
-      }
     }
 
     render();
     return el;
+  },
+
+
+  renderChecker(params) {
+    const el = Pages.createPage('题库体检');
+    const wrap = document.createElement('div');
+    wrap.className = 'page-content';
+    wrap.style.cssText = 'padding-bottom:40px';
+    el.appendChild(wrap);
+
+    // ── Drop zone ──
+    wrap.innerHTML = `
+      <div id="ck-dropzone" style="border:1.5px dashed var(--border);border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;background:var(--card);margin-bottom:4px;transition:border-color .2s;position:relative;overflow:hidden">
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(129,140,248,.07) 0%,transparent 70%);pointer-events:none"></div>
+        <div style="font-size:36px;margin-bottom:10px">🩺</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px">拖拽题库文件到这里</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">支持刷题宝导出的 .json 格式</div>
+        <label style="display:inline-block;padding:9px 22px;border-radius:8px;background:#818cf8;color:#fff;font-size:14px;font-weight:600;cursor:pointer">
+          选择文件 <input type="file" accept=".json" id="ck-file-input" style="display:none">
+        </label>
+      </div>
+      <div id="ck-results"></div>`;
+
+    const dropzone = wrap.querySelector('#ck-dropzone');
+    const fileInput = wrap.querySelector('#ck-file-input');
+    const results   = wrap.querySelector('#ck-results');
+
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--accent)'; });
+    dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = ''; });
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault(); dropzone.style.borderColor = '';
+      if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try { analyze(JSON.parse(ev.target.result), file.name, file.size); }
+        catch(e) { Utils.toast('JSON 解析失败，请确认文件格式'); }
+      };
+      reader.readAsText(file);
+    }
+
+    function escH(s) {
+      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderIssueCard(issue) {
+      const badgeClass = { red: 'ck-badge-red', yellow: 'ck-badge-yellow' }[issue.level] || 'ck-badge-yellow';
+      const levelText  = { red: '错误', yellow: '警告' }[issue.level] || '';
+      const uid = 'ckb' + Math.random().toString(36).slice(2);
+      const preview = issue.items.slice(0, 150);
+      const actionHtml = issue.actionHtml || '';
+      return `
+        <div class="ck-issue-card">
+          <div class="ck-issue-header" data-body="${uid}">
+            <span class="ck-badge ${badgeClass}">${levelText}</span>
+            <span class="ck-issue-name">${escH(issue.name)}</span>
+            ${actionHtml}
+            <span style="font-family:monospace;font-size:13px;color:var(--text3)">${issue.count}</span>
+            <span class="ck-chevron" data-chev="${uid}">›</span>
+          </div>
+          <div class="ck-issue-body" id="${uid}">
+            <div class="ck-q-item" style="background:var(--surface2)" style="font-size:12px;color:var(--text2)">${escH(issue.desc)}</div>
+            ${preview.map(item => `
+              <div class="ck-q-item">
+                <div class="ck-q-folder">${escH(item.folder||'')}</div>
+                <div class="ck-q-text">${escH((item.text||'').length>80?(item.text||'').slice(0,80)+'…':(item.text||''))}</div>
+                ${item.detail ? `<div class="ck-q-detail">${escH(item.detail)}</div>` : ''}
+                <div>${(item.tags||[]).map(t=>`<span class="ck-tag ck-tag-${t.cls}">${escH(t.text)}</span>`).join('')}</div>
+              </div>`).join('')}
+            ${issue.items.length > 150 ? `<div class="ck-q-item" style="color:var(--text3);font-size:12px">…还有 ${issue.items.length-150} 条</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    function analyze(data, filename, filesize) {
+      let allQs = [];
+      const folders = data.folders || (data.questions ? [{ name:'（默认）', questions: data.questions }] : []);
+      for (const f of folders)
+        for (const q of (f.questions||[]))
+          allQs.push({...q, _folder: f.name});
+
+      const total = allQs.length;
+      const issues = [];
+
+      // 1. 缺失答案
+      const missingAnswer = allQs.filter(q => !q.answer || String(q.answer).trim() === '');
+      if (missingAnswer.length) issues.push({
+        id:'missing-answer', level:'red', name:'缺失答案', count:missingAnswer.length,
+        desc:'这些题目的 answer 字段为空，将无法正常答题。',
+        items: missingAnswer.map(q=>({ folder:q._folder, text:q.question, detail:'类型：'+(q.type||'未知'), tags:[{text:'无答案',cls:'red'}] }))
+      });
+
+      // 2. 题目文本为空
+      const missingQuestion = allQs.filter(q => !q.question || String(q.question).trim() === '');
+      if (missingQuestion.length) issues.push({
+        id:'missing-question', level:'red', name:'题目文本为空', count:missingQuestion.length,
+        desc:'题目 question 字段为空，通常是格式转换有误。',
+        items: missingQuestion.map(q=>({ folder:q._folder, text:'（题目内容为空）', detail:'答案：'+(q.answer||'—'), tags:[{text:'无题目',cls:'red'}] }))
+      });
+
+      // 3. 选择题缺选项
+      const missingOptions = allQs.filter(q =>
+        (q.type==='单选'||q.type==='多选') && (!q.options||!Array.isArray(q.options)||q.options.length<2));
+      if (missingOptions.length) issues.push({
+        id:'missing-options', level:'red', name:'选择题缺少选项', count:missingOptions.length,
+        desc:'单选题和多选题必须有至少 2 个选项。',
+        items: missingOptions.map(q=>({ folder:q._folder, text:q.question, detail:'当前选项数：'+((q.options||[]).length), tags:[{text:q.type,cls:'yellow'},{text:'选项不足',cls:'red'}] }))
+      });
+
+      // 4. 答案字母越界
+      const answerOutOfRange = allQs.filter(q => {
+        if ((q.type!=='单选'&&q.type!=='多选')||!q.options) return false;
+        const letters = (Array.isArray(q.answer)?q.answer:(q.answer||'').split('')).filter(c=>/[A-Z]/.test(c));
+        return letters.some(l => l.charCodeAt(0)-65 >= q.options.length);
+      });
+      if (answerOutOfRange.length) issues.push({
+        id:'answer-range', level:'red', name:'答案字母超出选项范围', count:answerOutOfRange.length,
+        desc:'答案字母超过了实际选项数量，题目将永远答不对。',
+        items: answerOutOfRange.map(q=>({ folder:q._folder, text:q.question, detail:'答案：'+q.answer+'，选项数：'+(q.options||[]).length, tags:[{text:q.type,cls:'yellow'},{text:'答案越界',cls:'red'}] }))
+      });
+
+      // 5. 判断题答案异常
+      const JUDGE_OK = ['正确','错误','对','错','true','false','True','False'];
+      const badJudge = allQs.filter(q => q.type==='判断' && q.answer && !JUDGE_OK.includes(String(q.answer).trim()));
+      if (badJudge.length) issues.push({
+        id:'bad-judge', level:'yellow', name:'判断题答案不规范', count:badJudge.length,
+        desc:'判断题的 answer 建议为「正确」或「错误」。',
+        items: badJudge.map(q=>({ folder:q._folder, text:q.question, detail:'当前答案：「'+q.answer+'」', tags:[{text:'判断',cls:'blue'},{text:'答案异常',cls:'yellow'}] }))
+      });
+
+      // 6. 题型异常
+      const VALID_TYPES = ['单选','多选','判断','填空'];
+      const badType = allQs.filter(q => !q.type || !VALID_TYPES.includes(q.type));
+      if (badType.length) issues.push({
+        id:'bad-type', level:'yellow', name:'题型字段缺失或未知', count:badType.length,
+        desc:'题型（type）应为：单选、多选、判断、填空之一。',
+        items: badType.map(q=>({ folder:q._folder, text:q.question, detail:'当前type：「'+(q.type||'（空）')+'」', tags:[{text:q.type||'无类型',cls:'yellow'}] }))
+      });
+
+      // 7. 重复题（每组只显示1条代表）
+      const dupMap = new Map();
+      for (const q of allQs) {
+        const key = String(q.question).trim() + '|||' + String(q.answer).trim();
+        if (!dupMap.has(key)) dupMap.set(key, []);
+        dupMap.get(key).push(q);
+      }
+      const dupGroups = [...dupMap.values()].filter(g => g.length > 1);
+      if (dupGroups.length) {
+        const dupCount = dupGroups.reduce((s,g) => s+g.length-1, 0);
+        window._ckDupGroups = dupGroups;
+        window._ckData = data;
+        window._ckFilename = filename;
+        issues.push({
+          id:'duplicate', level:'yellow',
+          name:'重复题目', count:dupGroups.length,
+          desc:'每组只展示代表题，括号内为多余条数。可点击右侧按钮一键导出去重文件。',
+          actionHtml: `<button onclick="event.stopPropagation();Pages._checkerDeleteDups()" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--success);color:var(--success);background:transparent;cursor:pointer;flex-shrink:0;font-family:inherit">🗑️ 删重 (${dupCount}条)</button>`,
+          items: dupGroups.map(g=>({ folder:g[0]._folder, text:g[0].question, detail:g.length+'条重复，多余'+(g.length-1)+'条', tags:[{text:g[0]._folder,cls:'gray'}] }))
+        });
+      }
+
+      // 8. 题目过长
+      const tooLong = allQs.filter(q => q.question && q.question.length > 500);
+      if (tooLong.length) issues.push({
+        id:'too-long', level:'yellow', name:'题目文本过长', count:tooLong.length,
+        desc:'题目超过500字，可能混入了解析内容。',
+        items: tooLong.map(q=>({ folder:q._folder, text:q.question.slice(0,60)+'…', detail:'字符数：'+q.question.length, tags:[{text:q.question.length+'字',cls:'yellow'}] }))
+      });
+
+      // 9. 选项内容为空
+      const emptyOption = allQs.filter(q => q.options&&Array.isArray(q.options)&&q.options.some(o=>!o||String(o).trim()===''));
+      if (emptyOption.length) issues.push({
+        id:'empty-option', level:'yellow', name:'选项内容为空', count:emptyOption.length,
+        desc:'部分选择题存在空字符串选项。',
+        items: emptyOption.map(q=>({ folder:q._folder, text:q.question, detail:'选项：['+(q.options||[]).map(o=>o||'（空）').join(' / ')+']', tags:[{text:'空选项',cls:'yellow'}] }))
+      });
+
+      // 无解析（统计用）
+      const noExp = allQs.filter(q => !q.explanation || !String(q.explanation).trim());
+
+      const errorIssues = issues.filter(i=>i.level==='red').reduce((s,i)=>s+i.count,0);
+      const warnIssues  = issues.filter(i=>i.level==='yellow').reduce((s,i)=>s+i.count,0);
+      const score = total===0 ? 100 : Math.max(0, Math.round(100-(errorIssues/total*60)-(warnIssues/total*20)));
+      const scoreColor = score>=90 ? '#22c55e' : score>=70 ? '#eab308' : '#ef4444';
+      const scoreText  = score>=90 ? '健康' : score>=70 ? '需要关注' : '问题较多';
+      const kb = filesize ? (filesize/1024).toFixed(1)+'KB' : '';
+
+      // ── Render ──
+      dropzone.style.display = 'none';
+      results.innerHTML = `
+        <div class="ck-file-bar">
+          <span style="font-size:22px">📄</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(filename)}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:1px">${folders.length}个文件夹 · ${total}道题${kb?' · '+kb:''}</div>
+          </div>
+          <button onclick="this.closest('#ck-results').innerHTML='';document.getElementById('ck-dropzone').style.display=''"
+            style="padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0">
+            重新上传
+          </button>
+        </div>
+
+        <div class="ck-summary-grid">
+          <div class="ck-summary-card"><div class="ck-summary-num" style="color:var(--text)">${total}</div><div class="ck-summary-label">题目总数</div></div>
+          <div class="ck-summary-card"><div class="ck-summary-num" style="color:#ef4444">${errorIssues}</div><div class="ck-summary-label">严重问题</div></div>
+          <div class="ck-summary-card"><div class="ck-summary-num" style="color:#eab308">${warnIssues}</div><div class="ck-summary-label">警告</div></div>
+          <div class="ck-summary-card"><div class="ck-summary-num" style="color:#3b82f6">${noExp.length}</div><div class="ck-summary-label">无解析</div></div>
+        </div>
+
+        <div class="ck-health-wrap">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:14px;font-weight:600">题库健康度</span>
+            <span style="font-family:monospace;font-size:22px;font-weight:700;color:${scoreColor}">${score}分</span>
+          </div>
+          <div class="ck-health-bar">
+            <div class="ck-health-fill" id="ck-hfill" style="width:0%;background:${scoreColor}"></div>
+          </div>
+          <div style="font-size:12px;color:var(--text2)">${scoreText} · ${issues.length===0?'未发现任何问题':'发现'+issues.length+'类问题，共影响'+(errorIssues+warnIssues)+'道题'}</div>
+        </div>
+
+        ${issues.length===0 ? `
+          <div style="text-align:center;padding:36px 16px;color:var(--text2)">
+            <div style="font-size:44px;margin-bottom:10px">✅</div>
+            <div style="font-size:17px;font-weight:700;color:#22c55e;margin-bottom:6px">题库状态良好！</div>
+            <div style="font-size:13px">未发现任何格式或数据异常，可以放心使用。</div>
+          </div>` : `
+          <div class="ck-section-label">严重问题</div>
+          ${issues.filter(i=>i.level==='red').map(renderIssueCard).join('')||'<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">无严重问题 🎉</div>'}
+          <div class="ck-section-label">警告</div>
+          ${issues.filter(i=>i.level==='yellow').map(renderIssueCard).join('')||'<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">无警告</div>'}
+        `}
+
+        <div class="ck-section-label">信息统计</div>
+        <div class="ck-issue-card">
+          <div class="ck-q-item" style="display:flex;justify-content:space-between">
+            <span style="color:var(--text2)">无解析题目</span>
+            <span style="font-family:monospace;color:var(--text3)">${noExp.length} / ${total}</span>
+          </div>
+          ${folders.map(f => {
+            const fqs = allQs.filter(q=>q._folder===f.name);
+            const types = {};
+            fqs.forEach(q=>{ types[q.type||'未知']=(types[q.type||'未知']||0)+1; });
+            return `<div class="ck-q-item">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:var(--text2)">${escH(f.name)}</span>
+                <span style="font-family:monospace;color:var(--text3)">${fqs.length}题</span>
+              </div>
+              <div>${Object.entries(types).map(([t,n])=>`<span class="ck-tag ck-tag-gray">${t} ×${n}</span>`).join('')}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+
+      setTimeout(() => {
+        const fill = results.querySelector('#ck-hfill');
+        if (fill) fill.style.width = score + '%';
+      }, 80);
+
+      // Accordion toggles
+      results.querySelectorAll('.ck-issue-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const bodyId = header.dataset.body;
+          const body   = results.querySelector('#' + bodyId);
+          const chev   = header.querySelector('.ck-chevron');
+          if (body)  body.classList.toggle('open');
+          if (chev) chev.classList.toggle('open');
+        });
+      });
+    }
+
+    return el;
+  },
+
+  async _checkerDeleteDups() {
+    const groups = window._ckDupGroups;
+    const data   = window._ckData;
+    if (!groups || !data) return;
+    const dupCount = groups.reduce((s,g)=>s+g.length-1, 0);
+    const ok = await Utils.confirm('一键删重',
+      '将保留每组重复题的第1条，共删除 '+dupCount+' 条多余题目，导出为新文件。\n\n注意：此操作不修改当前题库，只生成新文件。',
+      '导出去重后文件', false);
+    if (!ok) return;
+    const seenKeys = new Set();
+    const cleanedData = {
+      ...data,
+      folders: (data.folders||[]).map(f => ({
+        ...f,
+        questions: (f.questions||[]).filter(q => {
+          const key = String(q.question||'').trim()+'|||'+String(q.answer||'').trim();
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key); return true;
+        })
+      }))
+    };
+    const json = JSON.stringify(cleanedData, null, 2);
+    const fname = (window._ckFilename||'题库').replace('.json','')+'-去重.json';
+    const blob = new Blob([json], {type:'application/json'});
+    if (navigator.share && navigator.canShare) {
+      try {
+        const file = new File([blob], fname, {type:'application/json'});
+        if (navigator.canShare({files:[file]})) { await navigator.share({files:[file]}); return; }
+      } catch(e) { if (e.name==='AbortError') return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    Utils.toast('✅ 已导出去重后的题库文件');
   },
 
 };
@@ -4312,23 +5256,27 @@ answer 使用字母 A-Z，第一个选项是 A
    动作模块（Actions）
    ========================================================= */
 const Actions = {
-  async toggleTheme() {
+  toggleTheme() {
     const html = document.documentElement;
-    // 第一帧：加过渡类，让浏览器应用 transition 规则
     html.classList.add('theme-transitioning');
-    // 强制 reflow，确保浏览器记录当前颜色状态作为动画起点
     void html.offsetHeight;
-    // 第二帧：再改主题，浏览器就能从"旧颜色"过渡到"新颜色"
-    requestAnimationFrame(() => {
-      State.darkMode = !State.darkMode;
-      html.setAttribute('data-theme', State.darkMode ? 'dark' : '');
-      document.querySelector('meta[name="color-scheme"]').setAttribute('content', State.darkMode ? 'only dark' : 'only light');
-      DB.setMeta('darkMode', State.darkMode);
-      document.querySelectorAll('#theme-btn').forEach(btn => {
-        btn.innerHTML = State.darkMode ? Icons.sun : Icons.moon;
-      });
-      setTimeout(() => html.classList.remove('theme-transitioning'), 400);
+    State.darkMode = !State.darkMode;
+    html.setAttribute('data-theme', State.darkMode ? 'dark' : '');
+    document.querySelector('meta[name="color-scheme"]').setAttribute('content', State.darkMode ? 'only dark' : 'only light');
+    DB.setMeta('darkMode', State.darkMode);
+    try { localStorage.setItem('quizapp_darkMode', String(State.darkMode)); } catch(e){}
+    document.querySelectorAll('#theme-btn').forEach(btn => {
+      btn.innerHTML = State.darkMode ? Icons.sun : Icons.moon;
     });
+    const sub = document.getElementById('theme-mode-sub');
+    const tog = document.getElementById('settings-theme-toggle');
+    if (sub) sub.textContent = State.darkMode ? '已开启' : '已关闭';
+    if (tog) {
+      tog.style.background = State.darkMode ? 'var(--accent)' : 'var(--border)';
+      tog.querySelector('div').style.left = State.darkMode ? '21px' : '3px';
+    }
+    Utils.syncStatusBar(State.darkMode);
+    setTimeout(() => html.classList.remove('theme-transitioning'), 350);
   },
 
   _showQDetail(q, onSave) {
@@ -4352,7 +5300,7 @@ const Actions = {
       : '从未';
     const statusColor = !q.srsNextReview ? 'var(--text3)'
       : q.srsNextReview <= now ? 'var(--danger)' : 'var(--success)';
-    const mastered = q.srsNextReview && q.srsNextReview > now && (q.wrongCount||0) === 0 && (q.srsLevel||0) >= 2;
+    const mastered = q.srsNextReview && q.srsNextReview > now && (q.srsLevel||0) >= 2;
     const statusLabel = !q.srsNextReview ? '新题'
       : q.srsNextReview <= now ? '待复习'
       : mastered ? '已掌握' : '学习中';
@@ -4379,6 +5327,12 @@ const Actions = {
           <div class="stat-row"><span class="stat-label">答错</span><span class="stat-val text-danger">${q.wrongCount||0} 次</span></div>
         </div>
 
+        ${q.explanation ? `
+        <div class="section-title" style="margin:0 0 8px">💡 解析</div>
+        <div class="explanation-box" style="margin-bottom:14px">
+          <div class="explanation-text rendered-content">${AI.renderFull(q.explanation)}</div>
+        </div>` : ''}
+
         <div class="section-title" style="margin:0 0 8px">✏️ 笔记</div>
         ${q.note
           ? `<div style="background:var(--warn-light);border-radius:var(--radius3);padding:12px;font-size:14px;color:var(--text);line-height:1.6;margin-bottom:12px;white-space:pre-wrap">${Utils.esc(q.note)}</div>`
@@ -4393,18 +5347,18 @@ const Actions = {
         </div>
         <button class="btn btn-primary btn-block" id="detail-start-btn">开始做题</button>
       </div>`;
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
     document.body.appendChild(ov);
     ov.querySelector('#detail-edit-note').onclick = () => {
-      ov.remove();
+      Utils.closeModal(ov);
       Actions._showNoteEditor(q, onSave);
     };
     ov.querySelector('#detail-edit-q').onclick = () => {
-      ov.remove();
+      Utils.closeModal(ov);
       Nav.push('editQ', { folderId: q.folderId, qId: q.id });
     };
     ov.querySelector('#detail-start-btn').onclick = () => {
-      ov.remove();
+      Utils.closeModal(ov);
       Nav.push('quiz', { questions: [q], startIdx: 0, mode: 'practice' });
     };
     // AI button - show only if configured
@@ -4418,33 +5372,130 @@ const Actions = {
   },
 
   _showNoteEditor(q, onSave) {
+    const hasNote = !!(q.note && q.note.trim());
     const ov = document.createElement('div');
     ov.className = 'modal-overlay';
     ov.innerHTML = `
       <div class="modal-sheet">
         <div class="modal-handle"></div>
-        <div class="modal-title" style="margin-bottom:12px">✏️ 笔记</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="modal-title" style="margin:0">✏️ 笔记</div>
+          ${hasNote ? `<button id="note-edit-toggle" class="btn btn-outline" style="font-size:12px;padding:4px 12px">编辑</button>` : ''}
+        </div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Utils.esc(q.question)}</div>
-        <textarea id="note-input" class="form-input" rows="6" placeholder="记下你的理解、记忆技巧或补充说明..." style="resize:none;width:100%;min-height:120px">${Utils.esc(q.note||'')}</textarea>
+        ${hasNote
+          ? `<div id="note-readonly" style="background:var(--warn-light);border-radius:var(--radius3);padding:12px;font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;min-height:80px;margin-bottom:12px">${Utils.esc(q.note)}</div>
+             <textarea id="note-input" class="form-input" rows="6" style="resize:none;width:100%;min-height:120px;display:none">${Utils.esc(q.note||'')}</textarea>`
+          : `<textarea id="note-input" class="form-input" rows="6" placeholder="记下你的理解、记忆技巧或补充说明..." style="resize:none;width:100%;min-height:120px">${Utils.esc(q.note||'')}</textarea>`}
         <div style="display:flex;gap:10px;margin-top:12px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
-          <button class="btn btn-primary flex-1" id="note-save-btn">保存</button>
+          <button class="btn btn-outline flex-1" id="note-cancel-btn">关闭</button>
+          <button class="btn btn-primary flex-1" id="note-save-btn" ${hasNote?'style="display:none"':''}>保存</button>
         </div>
       </div>`;
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
     document.body.appendChild(ov);
     const inp = ov.querySelector('#note-input');
-    setTimeout(() => inp?.focus(), 100);
-    ov.querySelector('#note-save-btn').onclick = async () => {
+    const cancelBtn = ov.querySelector('#note-cancel-btn');
+    const saveBtn = ov.querySelector('#note-save-btn');
+    // 无笔记时自动聚焦
+    if (!hasNote) setTimeout(() => inp?.focus(), 100);
+    // 编辑按钮切换只读→可编辑
+    ov.querySelector('#note-edit-toggle')?.addEventListener('click', () => {
+      ov.querySelector('#note-readonly').style.display = 'none';
+      inp.style.display = '';
+      saveBtn.style.display = '';
+      cancelBtn.textContent = '取消';
+      setTimeout(() => inp.focus(), 50);
+    });
+    cancelBtn.onclick = () => Utils.closeModal(ov);
+    saveBtn.onclick = async () => {
       q.note = inp.value.trim();
       const freshQ = (await DB.getAllQuestions()).find(x => x.id === q.id) || q;
       freshQ.note = q.note;
       await DB.saveQuestion(freshQ);
-      ov.remove();
+      Utils.closeModal(ov);
       Utils.toast(q.note ? '笔记已保存' : '笔记已清除');
       if (onSave) onSave();
     };
   },
+
+
+  _showRenderLibsManager() {
+    const show = async () => {
+      const libs = await AI.getLibStatus();
+      const allReady = libs.every(l => l.ready);
+      const ov = document.createElement('div');
+      ov.className = 'modal-overlay center';
+      ov.innerHTML = `
+        <div class="modal-dialog" style="max-width:340px">
+          <div class="modal-title" style="margin-bottom:14px">📦 渲染库</div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+            ${libs.map(lib => `
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px">
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:500;color:var(--text)">${lib.name}</div>
+                  <div style="font-size:11px;color:var(--text3)">${lib.desc}</div>
+                </div>
+                <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${lib.ready?'var(--success-light)':'var(--bg2)'};color:${lib.ready?'var(--success)':'var(--text3)'}">
+                  ${lib.ready ? '✅ 已就绪' : '⬜ 未加载'}
+                </span>
+              </div>`).join('')}
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+            ${allReady ? '渲染库已缓存到本地，无需重复下载。如显示异常可重新加载。' : '下载后永久缓存，不影响离线使用，建议在 Wi-Fi 下操作。'}
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">关闭</button>
+            <button class="btn btn-primary flex-1" id="mgr-load-btn">${allReady ? '🔄 重新加载' : '⬇️ 下载渲染库'}</button>
+          </div>
+        </div>`;
+      ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
+      document.body.appendChild(ov);
+
+      ov.querySelector('#mgr-load-btn').onclick = async () => {
+        if (allReady) {
+          const confirmed = await Utils.confirm('重新加载渲染库', '仅在渲染异常时需要，正常情况无需操作。', '重新加载', '取消');
+          if (!confirmed) return;
+          await AI.clearLibs();
+        }
+        Utils.closeModal(ov);
+        await Actions._doLoadLibs();
+        show(); // 重新打开刷新状态
+      };
+    };
+    show();
+  },
+
+  async _doLoadLibs(silent = false) {
+    const toast = (msg) => { if (!silent) Utils.toast(msg); };
+    const progressOv = document.createElement('div');
+    progressOv.className = 'modal-overlay center';
+    progressOv.innerHTML = `
+      <div class="modal-dialog" style="max-width:280px;text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">⬇️</div>
+        <div class="modal-title" style="margin-bottom:8px">下载渲染库</div>
+        <div id="load-progress-txt" style="font-size:13px;color:var(--text3);line-height:1.6">准备中...</div>
+      </div>`;
+    document.body.appendChild(progressOv);
+    const txt = progressOv.querySelector('#load-progress-txt');
+    try {
+      const results = await AI.loadLibs((i, total, name) => {
+        if (txt) txt.textContent = `下载中 ${i+1}/${total}：${name}`;
+      });
+      Utils.closeModal(progressOv);
+      const failed = results.filter(r => !r.ok);
+      if (failed.length) {
+        toast(`⚠️ ${failed.map(r=>r.name).join('、')} 下载失败，请检查网络后重试`);
+      } else {
+        await AI.injectLibs();
+        toast('✅ 渲染库加载完成，公式/代码高亮已就绪');
+      }
+    } catch(e) {
+      Utils.closeModal(progressOv);
+      toast('❌ 下载失败：' + e.message);
+    }
+  },
+
   showContact() {
     const ov = document.createElement('div');
     ov.className = 'modal-overlay center';
@@ -4465,9 +5516,9 @@ const Actions = {
         <div style="font-size:12px;color:var(--text3);line-height:1.6;border-top:1px solid var(--border);padding-top:14px">
           本网页由临沂市机电工程学校<br>23级电气学生设计
         </div>
-        <button class="btn btn-outline btn-block" style="margin-top:14px" onclick="this.closest('.modal-overlay').remove()">关闭</button>
+        <button class="btn btn-outline btn-block" style="margin-top:14px" onclick="Utils.closeModal(this.closest('.modal-overlay'))">关闭</button>
       </div>`;
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
     document.body.appendChild(ov);
   },
 
@@ -4496,16 +5547,16 @@ const Actions = {
               </div>
             </button>
           </div>
-          <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
         </div>`;
-      ov.onclick = e => { if (e.target === ov) { ov.remove(); resolve(); } };
+      ov.onclick = e => { if (e.target === ov) { Utils.closeModal(ov); resolve(); } };
       ov.querySelector('#import-local-btn').onclick = () => {
-        ov.remove();
+        Utils.closeModal(ov);
         Actions._doLocalImport();
         resolve();
       };
       ov.querySelector('#import-url-btn').onclick = () => {
-        ov.remove();
+        Utils.closeModal(ov);
         Actions._doUrlImport();
         resolve();
       };
@@ -4514,11 +5565,15 @@ const Actions = {
   },
 
   async _doLocalImport() {
-    const input = document.getElementById('import-input');
+    // 每次创建新 input，避免复用旧元素导致二次触发
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
     input.onchange = async (e) => {
       const file = e.target.files[0];
+      document.body.removeChild(input);
       if (!file) return;
-      input.value = '';
       try {
         const text = await file.text();
         const data = JSON.parse(text);
@@ -4594,19 +5649,13 @@ const Actions = {
           for (const q of data.questions) await importQuestion(folder, q);
         }
 
-        // 导入全局统计数据
-        if (data.globalStats) {
-          const gs = data.globalStats;
-          await DB.setMeta('points',        (gs.points        || 0) + ((await DB.getMeta('points'))        || 0));
-          await DB.setMeta('totalAnswered',  (gs.totalAnswered || 0) + ((await DB.getMeta('totalAnswered')) || 0));
-          await DB.setMeta('totalRight',     (gs.totalRight    || 0) + ((await DB.getMeta('totalRight'))    || 0));
-          await DB.setMeta('totalWrong',     (gs.totalWrong    || 0) + ((await DB.getMeta('totalWrong'))    || 0));
-          await DB.setMeta('studyMinutes',   (gs.studyMinutes  || 0) + ((await DB.getMeta('studyMinutes'))  || 0));
-        }
+        // 询问是否导入学习记录
+        const replaceStats = await Actions._askImportStats(data.globalStats);
+        await Actions._applyImportStats(data.globalStats, replaceStats);
 
         const msg = skipped > 0
-          ? `✅ 导入 ${count} 道，跳过 ${skipped} 道重复题${data.globalStats ? '，学习记录已合并' : ''}`
-          : `✅ 成功导入 ${count} 道题目${data.globalStats ? '，学习记录已合并' : ''}`;
+          ? `✅ 导入 ${count} 道，跳过 ${skipped} 道重复题${replaceStats ? '，学习记录已替换' : ''}`
+          : `✅ 成功导入 ${count} 道题目${replaceStats ? '，学习记录已替换' : ''}`;
         Utils.toast(msg);
         await Nav.refreshHome();
       } catch(e) {
@@ -4628,11 +5677,11 @@ const Actions = {
         </div>
         <input class="form-input" id="url-import-input" placeholder="https://example.com/quiz.json" style="margin-bottom:14px">
         <div style="display:flex;gap:10px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
           <button class="btn btn-primary flex-1" id="url-import-ok">连接并检测</button>
         </div>
       </div>`;
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.onclick = e => { if (e.target === ov) Utils.closeModal(ov); };
     document.body.appendChild(ov);
     setTimeout(() => ov.querySelector('#url-import-input')?.focus(), 100);
 
@@ -4640,7 +5689,7 @@ const Actions = {
       const url = ov.querySelector('#url-import-input').value.trim();
       if (!url) { Utils.toast('请输入URL'); return; }
       if (!url.startsWith('http')) { Utils.toast('请输入完整的 http/https 地址'); return; }
-      ov.remove();
+      Utils.closeModal(ov);
 
       // 显示"正在连接"状态（15s 超时）
       const loading = document.createElement('div');
@@ -4748,18 +5797,12 @@ const Actions = {
           for (const q of data.questions) await importQ2(folder, q);
         }
 
-        if (data.globalStats) {
-          const gs = data.globalStats;
-          await DB.setMeta('points',       (gs.points||0)        + ((await DB.getMeta('points'))||0));
-          await DB.setMeta('totalAnswered', (gs.totalAnswered||0) + ((await DB.getMeta('totalAnswered'))||0));
-          await DB.setMeta('totalRight',    (gs.totalRight||0)    + ((await DB.getMeta('totalRight'))||0));
-          await DB.setMeta('totalWrong',    (gs.totalWrong||0)    + ((await DB.getMeta('totalWrong'))||0));
-          await DB.setMeta('studyMinutes',  (gs.studyMinutes||0)  + ((await DB.getMeta('studyMinutes'))||0));
-        }
+        const replaceStats2 = await Actions._askImportStats(data.globalStats);
+        await Actions._applyImportStats(data.globalStats, replaceStats2);
 
         const msg2 = skipped > 0
-          ? `✅ 导入 ${count} 道，跳过 ${skipped} 道重复题${data.globalStats?'，统计数据已合并':''}`
-          : `✅ 成功导入 ${count} 道题目${data.globalStats?'，统计数据已合并':''}`;
+          ? `✅ 导入 ${count} 道，跳过 ${skipped} 道重复题${replaceStats2 ? '，学习记录已替换' : ''}`
+          : `✅ 成功导入 ${count} 道题目${replaceStats2 ? '，学习记录已替换' : ''}`;
         Utils.toast(msg2);
         await Nav.refreshHome();
       } catch(err) {
@@ -4772,6 +5815,81 @@ const Actions = {
         }
       }
     };
+  },
+
+  // 检测更新（调用 Android 原生桥接）
+  checkUpdate() {
+    const sub = document.getElementById('update-check-sub');
+    if (sub) sub.textContent = '检测中...';
+    if (window.AndroidBridge && window.AndroidBridge.checkUpdate) {
+      window.AndroidBridge.checkUpdate();
+    } else {
+      if (sub) sub.textContent = '请在 App 内使用此功能';
+      setTimeout(() => { if (sub) sub.textContent = '—'; }, 2000);
+    }
+  },
+
+  // 供 Android 回调：存储版本号，并更新所有"当前版本"显示
+  _setVersionDisplay(ver) {
+    window._appVersion = ver;
+    document.querySelectorAll('.app-version-display').forEach(el => {
+      el.textContent = '当前版本 ' + ver;
+    });
+  },
+
+  // 供 Android 回调：无更新
+  _onNoUpdate(ver) {
+    if (ver) window._appVersion = ver;
+    const cur = window._appVersion ? ('当前版本 ' + window._appVersion) : '已是最新版本';
+    document.querySelectorAll('.app-version-display').forEach(el => {
+      el.textContent = '已是最新版本 ✓';
+      setTimeout(() => { el.textContent = cur; }, 3000);
+    });
+  },
+
+  // 供 Android 回调：检测失败（网络错误等）
+  _onCheckFailed(ver) {
+    if (ver) window._appVersion = ver;
+    const cur = window._appVersion ? ('当前版本 ' + window._appVersion) : '—';
+    document.querySelectorAll('.app-version-display').forEach(el => {
+      el.textContent = '检测失败，请重试';
+      setTimeout(() => { el.textContent = cur; }, 3000);
+    });
+  },
+
+  // 通用：询问是否合并学习记录，返回 true=替换/false=跳过
+  async _askImportStats(gs) {
+    if (!gs) return false;
+    return new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.className = 'modal-overlay center';
+      ov.innerHTML = `
+        <div class="modal-dialog" style="max-width:320px">
+          <div class="modal-title" style="margin-bottom:10px">📊 导入学习记录</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:14px">
+            文件中包含学习记录（积分、答题统计、使用时长）。<br>
+            <b>替换</b>：用文件中的数据替换本机记录<br>
+            <b>跳过</b>：只导入题库，保留本机记录
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline flex-1" id="isk-skip">跳过</button>
+            <button class="btn btn-primary flex-1" id="isk-replace">替换</button>
+          </div>
+        </div>`;
+      ov.onclick = e => { if (e.target === ov) { Utils.closeModal(ov); resolve(false); } };
+      document.body.appendChild(ov);
+      ov.querySelector('#isk-skip').onclick    = () => { Utils.closeModal(ov); resolve(false); };
+      ov.querySelector('#isk-replace').onclick = () => { Utils.closeModal(ov); resolve(true); };
+    });
+  },
+
+  async _applyImportStats(gs, replace) {
+    if (!gs || !replace) return;
+    await DB.setMeta('points',        gs.points        || 0);
+    await DB.setMeta('totalAnswered', gs.totalAnswered || 0);
+    await DB.setMeta('totalRight',    gs.totalRight    || 0);
+    await DB.setMeta('totalWrong',    gs.totalWrong    || 0);
+    await DB.setMeta('studyMinutes',  gs.studyMinutes  || 0);
   },
 
   // 导出JSON
@@ -4827,11 +5945,11 @@ const Actions = {
           <div id="export-count" style="font-size:13px;color:var(--text3);margin-top:14px;padding:10px;background:var(--surface2);border-radius:8px;text-align:center"></div>
         </div>
         <div style="flex-shrink:0;display:flex;gap:10px;margin-top:12px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
           <button class="btn btn-primary flex-1" id="do-export-btn">导出</button>
         </div>
       </div>`;
-    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = e => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
 
     // 全选/全不选
@@ -4903,10 +6021,16 @@ const Actions = {
         }))
       };
 
-      overlay.remove();
+      Utils.closeModal(overlay);
       const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
 
+      // 原生 app 环境：调用 AndroidBridge
+      if (window.AndroidBridge) {
+        try { window.AndroidBridge.shareFile(json, filename); return; } catch(e) {}
+      }
+
+      // Web 环境：navigator.share / 下载链接
+      const blob = new Blob([json], { type: 'application/json' });
       if (navigator.share && navigator.canShare) {
         try {
           const file = new File([blob], filename, { type: 'application/json' });
@@ -4946,12 +6070,12 @@ const Actions = {
         <div id="edit-ans-list">${buildRows(allAnswers)}</div>
         <button id="add-ans-btn" style="color:var(--accent);font-size:14px;padding:4px 0;margin-bottom:14px">+ 添加备选答案</button>
         <div style="display:flex;gap:10px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
           <button class="btn btn-primary flex-1" id="save-ans-btn">保存</button>
         </div>
       </div>`;
     overlay._onSaved = onSaved;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
     // 添加备选答案
     overlay.querySelector('#add-ans-btn').onclick = () => {
@@ -4979,7 +6103,7 @@ const Actions = {
       await DB.saveQuestion(dbq);
       Utils.toast('答案已更新');
       overlay._onSaved?.();
-      overlay.remove();
+      Utils.closeModal(overlay);
     };
   },
 
@@ -4993,11 +6117,11 @@ const Actions = {
         <div class="modal-sub">输入文件夹名称</div>
         <input class="form-input" id="new-folder-name" placeholder="文件夹名称" maxlength="20" style="margin-bottom:16px" autofocus>
         <div style="display:flex;gap:10px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
           <button class="btn btn-primary flex-1" onclick="Actions._doCreateFolder(this)">创建</button>
         </div>
       </div>`;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
     setTimeout(() => overlay.querySelector('#new-folder-name').focus(), 100);
   },
@@ -5030,10 +6154,10 @@ const Actions = {
             onclick="Actions._deleteFolder(${folderId},this)">
             ${Icons.trash} 删除文件夹
           </button>
-          <button class="btn btn-outline btn-block" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline btn-block" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
         </div>
       </div>`;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
   },
   _renameFolder(id, btn) {
@@ -5045,11 +6169,11 @@ const Actions = {
         <div class="modal-title">重命名文件夹</div>
         <input class="form-input" id="rename-input" placeholder="新名称" style="margin:12px 0 16px">
         <div style="display:flex;gap:10px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
           <button class="btn btn-primary flex-1" onclick="Actions._doRename(${id},this)">确认</button>
         </div>
       </div>`;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
     setTimeout(() => overlay.querySelector('#rename-input').focus(), 100);
   },
@@ -5108,7 +6232,7 @@ const Actions = {
           </div>
         </div>
         <div style="display:flex;gap:10px">
-          <button class="btn btn-outline flex-1" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline flex-1" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
           <button class="btn btn-primary flex-1" id="save-folder-style">保存</button>
         </div>
       </div>`;
@@ -5129,13 +6253,13 @@ const Actions = {
       f.icon = icon;
       f.color = pickedColor;
       await DB.saveFolder(f);
-      overlay.remove();
+      Utils.closeModal(overlay);
       Utils.toast('外观已更新');
       // 强制刷新当前页和首页
       await Nav.refreshCurrent();
       await Nav.refreshHome();
     };
-    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = e => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
   },
 
@@ -5166,10 +6290,10 @@ const Actions = {
             onclick="Actions._batchDelete(${JSON.stringify(selectedIds)}, this)">
             ${Icons.trash} 删除所选
           </button>
-          <button class="btn btn-outline btn-block" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-outline btn-block" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button>
         </div>
       </div>`;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) Utils.closeModal(overlay); };
     overlay._onDone = onDone;
     document.body.appendChild(overlay);
   },
@@ -5187,11 +6311,18 @@ const Actions = {
     const qs = await DB.getAllQuestions();
     for (const id of ids) {
       const q = qs.find(x => x.id === id);
-      if (q) { q.wrongCount = 0; q.rightCount = 0; q.weight = 1; await DB.saveQuestion(q); }
+      if (q) {
+        q.wrongCount = 0; q.rightCount = 0; q.weight = 1;
+        q.srsLevel = 0; q.srsInterval = 0; q.srsEase = 2.5;
+        q.srsNextReview = null; q.srsLastReview = null;
+        await DB.saveQuestion(q);
+      }
     }
     btn.closest('.modal-overlay')._onDone?.();
     btn.closest('.modal-overlay').remove();
     Utils.toast('已重置统计');
+    await Nav.refreshCurrent();
+    await Nav.refreshHome();
   },
   async _batchMoveFolder(ids, btn) {
     btn.closest('.modal-overlay').remove();
@@ -5207,9 +6338,9 @@ const Actions = {
             <div class="card-row-content"><div class="card-row-title">${Utils.esc(f.name)}</div></div>
             <div class="card-row-arrow">${Icons.chevron}</div>
           </div>`).join('')}
-        <div style="margin-top:12px"><button class="btn btn-outline btn-block" onclick="this.closest('.modal-overlay').remove()">取消</button></div>
+        <div style="margin-top:12px"><button class="btn btn-outline btn-block" onclick="Utils.closeModal(this.closest('.modal-overlay'))">取消</button></div>
       </div>`;
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) Utils.closeModal(overlay); };
     document.body.appendChild(overlay);
   },
   async _doMove(ids, newFolderId, btn) {
@@ -5238,14 +6369,18 @@ const Actions = {
     const qs = await DB.getAllQuestions();
     for (const q of qs) {
       q.wrongCount = 0; q.rightCount = 0; q.weight = 1;
+      q.srsLevel = 0; q.srsInterval = 0; q.srsEase = 2.5;
+      q.srsNextReview = null; q.srsLastReview = null;
       await DB.saveQuestion(q);
     }
     await DB.setMeta('points', 0);
     await DB.setMeta('totalAnswered', 0);
     await DB.setMeta('totalRight', 0);
     await DB.setMeta('totalWrong', 0);
+    await DB.setMeta('studyMinutes', 0);
     Utils.toast('统计已重置');
     await Nav.refreshCurrent();
+    await Nav.refreshHome();
   },
 
   // 删除所有数据（核弹选项）
@@ -5284,6 +6419,16 @@ const Actions = {
    拦截手机物理返回键 → 返回首页
    ========================================================= */
 window.addEventListener('popstate', (e) => {
+  // 第一优先级：关闭最顶层弹窗（modal-overlay 可见的那个）
+  const openModals = Array.from(document.querySelectorAll('.modal-overlay'))
+    .filter(m => m.isConnected && !m.classList.contains('closing'));
+  if (openModals.length > 0) {
+    // 关最后一个（最顶层）弹窗
+    Utils.closeModal(openModals[openModals.length - 1]);
+    history.pushState(null, '', location.href);
+    return;
+  }
+
   const app = document.getElementById('app');
   const pages = app.querySelectorAll('.page');
   if (pages.length <= 1) {
@@ -5309,6 +6454,29 @@ window.addEventListener('popstate', (e) => {
 async function main() {
   // 初始化数据库
   await DB.init();
+  // 启动时注入已缓存渲染库
+  await AI.injectLibs().catch(() => {});
+  // 首次进入：自动在后台下载渲染库，失败则提示
+  (async () => {
+    const libs = await AI.getLibStatus();
+    const allReady = libs.every(l => l.ready);
+    if (!allReady) {
+      // 静默下载
+      try {
+        const results = await AI.loadLibs(() => {});
+        const failed = results.filter(r => !r.ok);
+        if (failed.length === 0) {
+          await AI.injectLibs();
+        } else {
+          // 有失败项，弹提示
+          const failNames = failed.map(r => r.name).join('、');
+          Utils.toast(`⚠️ 渲染库下载未完成（${failNames}），公式可能无法显示。可前往 设置 → 渲染库 手动重试。`);
+        }
+      } catch(e) {
+        Utils.toast('⚠️ 渲染库下载失败，可前往 设置 → 渲染库 手动重试。');
+      }
+    }
+  })();
 
   // 恢复主题设置
   const savedTheme = await DB.getMeta('darkMode');
@@ -5316,7 +6484,28 @@ async function main() {
     State.darkMode = true;
     document.documentElement.setAttribute('data-theme', 'dark');
     document.querySelector('meta[name="color-scheme"]').setAttribute('content', 'only dark');
+    try { localStorage.setItem('quizapp_darkMode', 'true'); } catch(e){}
   }
+  // 通知原生 App 当前主题（用于状态栏图标色）
+  Utils.syncStatusBar(State.darkMode);
+
+  // 自动深色模式：启动时检测一次，之后每分钟检测一次
+  async function checkAutoDark() {
+    const enabled = await DB.getMeta('autoDarkEnabled');
+    if (!enabled) return;
+    const start = await DB.getMeta('autoDarkStart') || '22:00';
+    const end   = await DB.getMeta('autoDarkEnd')   || '07:00';
+    const now = new Date();
+    const cur = now.getHours() * 60 + now.getMinutes();
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    const s = sh * 60 + sm, e = eh * 60 + em;
+    // 跨夜判断：start > end 时（如 22:00-07:00），cur>=s 或 cur<e 才是深色
+    const shouldDark = s > e ? (cur >= s || cur < e) : (cur >= s && cur < e);
+    if (shouldDark !== State.darkMode) Actions.toggleTheme();
+  }
+  checkAutoDark();
+  setInterval(checkAutoDark, 60000);
 
   // 渲染首页
   await Pages.renderHome();
@@ -5327,6 +6516,52 @@ async function main() {
 
 // 启动
 main().catch(console.error);
+// 原生 app 传入文件时的处理入口
+window.handleIncomingFile = async function(jsonText) {
+  try {
+    const data = JSON.parse(jsonText);
+    const existingQs = await DB.getAllQuestions();
+    const existingKeys = new Set(existingQs.map(q => q.question.trim() + '||' + String(q.answer).trim()));
+    let count = 0, skipped = 0;
+    async function importQ(folder, q) {
+      const key = (q.question||'').trim() + '||' + String(q.answer||'').trim();
+      if (existingKeys.has(key)) { skipped++; return; }
+      existingKeys.add(key);
+      const answers = q.answers && q.answers.length ? q.answers : (q.answer ? [String(q.answer)] : []);
+      await DB.saveQuestion({ folderId: folder.id, type: q.type||'填空', question: q.question||q.content||'',
+        options: q.options, answer: String(q.answer||''), answers, explanation: q.explanation||'',
+        note: q.note||'', wrongCount: q.wrongCount||0, rightCount: q.rightCount||0,
+        srsLevel: q.srsLevel||0, srsInterval: q.srsInterval||0, srsEase: q.srsEase||2.5,
+        srsNextReview: q.srsNextReview||null, srsLastReview: q.srsLastReview||null,
+        weight: q.weight||1, starred: q.starred||false, createdAt: Date.now() });
+      count++;
+    }
+    if (data.folders) {
+      for (const f of data.folders) {
+        const allFolders = await DB.getFolders();
+        let folder = allFolders.find(x => x.name === f.name);
+        if (!folder) { const id = await DB.saveFolder({ name: f.name, createdAt: Date.now() }); folder = { id, name: f.name }; }
+        for (const q of (f.questions||[])) await importQ(folder, q);
+      }
+    } else if (data.questions) {
+      const allFolders = await DB.getFolders();
+      let folder = allFolders[0];
+      if (!folder) { const id = await DB.saveFolder({ name: '导入题库', createdAt: Date.now() }); folder = { id }; }
+      for (const q of data.questions) await importQ(folder, q);
+    }
+    // 询问是否替换学习记录
+    const replaceStats3 = await Actions._askImportStats(data.globalStats);
+    await Actions._applyImportStats(data.globalStats, replaceStats3);
+    Utils.toast(skipped > 0
+      ? `✅ 导入 ${count} 道，跳过 ${skipped} 道重复题${replaceStats3 ? '，学习记录已替换' : ''}`
+      : `✅ 成功导入 ${count} 道题目${replaceStats3 ? '，学习记录已替换' : ''}`);
+    await Nav.refreshHome();
+  } catch(e) {
+    Utils.toast('导入失败：文件格式有误');
+    console.error(e);
+  }
+};
+
 </script>
 </body>
 </html>
